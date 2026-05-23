@@ -55,17 +55,58 @@ const AnalysisDetail = z.object({
  * own that responsibility).
  * ────────────────────────────────────────────────────────────────────*/
 
+// User-supplied metadata flags accept either booleans or string forms
+// because multipart/form-data submissions stringify everything.
+const flag = z
+  .union([z.boolean(), z.string()])
+  .optional()
+  .transform((v) => {
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'string') return ['true', '1', 'yes', 'on'].includes(v.toLowerCase());
+    return false;
+  });
+
+// Tags may arrive as a JSON-stringified array (multipart) or as a real
+// array (JSON body). Normalize to a trimmed, lowercase, deduped list.
+const tagsField = z
+  .union([z.array(z.string()), z.string()])
+  .optional()
+  .transform((raw) => {
+    if (!raw) return [];
+    let list;
+    if (Array.isArray(raw)) list = raw;
+    else {
+      try {
+        const parsed = JSON.parse(raw);
+        list = Array.isArray(parsed) ? parsed : [String(raw)];
+      } catch {
+        list = String(raw).split(',');
+      }
+    }
+    return Array.from(
+      new Set(list.map((t) => String(t).trim().toLowerCase()).filter(Boolean))
+    ).slice(0, 12);
+  });
+
 const CreateDreamTextBody = z.object({
   inputType: z.literal('text'),
   transcript: z
     .string()
     .trim()
     .min(50, 'Transcript must be at least 50 characters for text submission'),
+  tags: tagsField,
+  isLucid: flag,
+  isRecurring: flag,
+  isNightmare: flag,
 });
 
 const CreateDreamAudioBody = z.object({
   inputType: z.literal('audio'),
   transcript: z.string().optional(),
+  tags: tagsField,
+  isLucid: flag,
+  isRecurring: flag,
+  isNightmare: flag,
 });
 
 const CreateDreamRequest = z.discriminatedUnion('inputType', [

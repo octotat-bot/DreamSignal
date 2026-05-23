@@ -6,6 +6,8 @@ const User = require('../models/User');
 const Pattern = require('../models/Pattern');
 const aiService = require('../services/aiService');
 const dreamEvents = require('../services/dreamEvents');
+const dreamQueue = require('../services/dreamQueue');
+const rootLogger = require('../services/logger').child({ scope: 'dreamController' });
 const { CreateDreamRequest } = require('../../shared/contracts');
 
 /**
@@ -81,16 +83,19 @@ const recomputePatterns = async (userId) => {
       { upsert: true, new: true }
     );
 
-    console.log(`Recomputed analytics patterns successfully for user: ${userId}`);
+    rootLogger.debug({ userId }, 'Recomputed analytics patterns');
   } catch (error) {
-    console.error(`Failed to recompute patterns for user ${userId}:`, error.message);
+    rootLogger.error({ userId, err: error.message }, 'Failed to recompute patterns');
   }
 };
 
 /**
- * Async processing pipeline run in the background (fire-and-forget)
+ * Async processing pipeline run in the background (fire-and-forget).
+ * `requestId` is forwarded from the originating HTTP request so log lines
+ * here can be grep-correlated with the createDream handler that started us.
  */
-const processDream = async (dreamId, userId, file) => {
+const processDream = async (dreamId, userId, file, requestId = null) => {
+  const log = rootLogger.child({ dreamId: String(dreamId), userId: String(userId), requestId });
   let audioTempPath = file ? file.path : null;
   let finalAudioPath = null;
 
@@ -104,9 +109,9 @@ const processDream = async (dreamId, userId, file) => {
 
     // 2. If audio, call FastAPI /transcribe
     if (audioTempPath) {
-      console.log(`Transcribing audio for dream: ${dreamId}...`);
+      log.info('Transcribing audio');
       dreamEvents.emit(dreamId, { stage: 'transcribing', processingStatus: 'processing' });
-      const transcriptionResult = await aiService.transcribeAudio(audioTempPath);
+      const transcriptionResult = await aiService.transcribeAudio(audioTempPath, { requestId, log });
       transcript = transcriptionResult.transcript;
       duration = transcriptionResult.duration_seconds;
 
@@ -139,9 +144,9 @@ const processDream = async (dreamId, userId, file) => {
     }).select('+embedding _id embedding analysis.title');
 
     // 4. Send transcript and embeddings to FastAPI for analysis
-    console.log(`Analyzing dream elements: ${dreamId}...`);
+    log.info('Analyzing dream elements');
     dreamEvents.emit(dreamId, { stage: 'analyzing', processingStatus: 'processing' });
-    const analysisResult = await aiService.analyzeDream(transcript, dreamId, userId, existingDreams);
+    const analysisResult = await aiService.analyzeDream(transcript, dreamId, userId, existingDreams, { requestId, log });
     dreamEvents.emit(dreamId, { stage: 'analyzed', processingStatus: 'processing' });
 
     // 5. Update dream document with results
@@ -169,14 +174,14 @@ const processDream = async (dreamId, userId, file) => {
       processingStatus: 'complete'
     });
 
-    console.log(`Dream processing completed: ${dreamId}`);
+    log.info('Dream processing completed');
     dreamEvents.emit(dreamId, { stage: 'archived', processingStatus: 'complete' });
 
     // 6. Recompute patterns
     await recomputePatterns(userId);
 
   } catch (error) {
-    console.error(`Pipeline execution failed for dream: ${dreamId}`, error.message);
+    log.error({ err: error.message }, 'Pipeline execution failed');
 
     // Set status to failed and save error message
     await Dream.findByIdAndUpdate(dreamId, {
@@ -194,7 +199,7 @@ const processDream = async (dreamId, userId, file) => {
       try {
         fs.unlinkSync(audioTempPath);
       } catch (cleanupErr) {
-        console.error('Failed to delete temporary audio file on crash:', cleanupErr.message);
+        log.warn({ err: cleanupErr.message }, 'Failed to delete temp audio on crash');
       }
     }
   }
@@ -213,7 +218,7 @@ const createDream = async (req, res, next) => {
       const message = parsed.error.issues[0]?.message || 'Invalid dream submission payload';
       return res.status(400).json({ message });
     }
-    const { inputType } = parsed.data;
+    const { inputType, tags, isLucid, isRecurring, isNightmare } = parsed.data;
     const transcript = parsed.data.transcript;
     const file = req.file;
 
@@ -226,6 +231,10 @@ const createDream = async (req, res, next) => {
       userId: req.user.id,
       inputType,
       rawTranscript: inputType === 'text' ? transcript.trim() : 'Processing voice recording...',
+      tags: tags || [],
+      isLucid: !!isLucid,
+      isRecurring: !!isRecurring,
+      isNightmare: !!isNightmare,
       processingStatus: 'pending'
     });
 
@@ -240,10 +249,16 @@ const createDream = async (req, res, next) => {
       message: 'Dream analysis processing started successfully'
     });
 
-    // 4. Fire-and-forget background pipeline
-    processDream(newDream._id, req.user.id, file).catch(err => {
-      console.error('Uncaught background pipeline execution error:', err.message);
-    });
+    // 4. Hand off to BullMQ when Redis is available, otherwise the queue
+    //    transparently falls back to inline fire-and-forget execution.
+    dreamQueue
+      .enqueueDream(newDream._id, req.user.id, file, req.id)
+      .catch((err) => {
+        rootLogger.error(
+          { err: err.message, dreamId: String(newDream._id) },
+          'Failed to enqueue dream pipeline'
+        );
+      });
 
   } catch (error) {
     next(error);
@@ -257,7 +272,7 @@ const getDreams = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const { emotion, symbol, search, sortBy } = req.query;
+    const { emotion, symbol, search, sortBy, tag, lucid, recurring, nightmare } = req.query;
 
     const query = { userId: req.user.id };
 
@@ -270,6 +285,22 @@ const getDreams = async (req, res, next) => {
     if (symbol) {
       query['symbols.label'] = symbol.toLowerCase();
     }
+
+    // Tag filter — accepts a single tag or comma-separated list (matches any)
+    if (tag) {
+      const tags = String(tag)
+        .split(',')
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      if (tags.length === 1) query.tags = tags[0];
+      else if (tags.length > 1) query.tags = { $in: tags };
+    }
+
+    // Subjective attribute filters
+    const isTruthy = (v) => v === 'true' || v === '1' || v === true;
+    if (lucid !== undefined)     query.isLucid     = isTruthy(lucid);
+    if (recurring !== undefined) query.isRecurring = isTruthy(recurring);
+    if (nightmare !== undefined) query.isNightmare = isTruthy(nightmare);
 
     // Text search (regex case-insensitive)
     if (search && search.trim()) {
@@ -353,7 +384,7 @@ const deleteDream = async (req, res, next) => {
         try {
           fs.unlinkSync(audioFilePath);
         } catch (unlinkErr) {
-          console.error('Failed to unlink audio file:', unlinkErr.message);
+          rootLogger.warn({ err: unlinkErr.message, audioFilePath }, 'Failed to unlink audio file');
         }
       }
     }
@@ -370,6 +401,38 @@ const deleteDream = async (req, res, next) => {
     // Recompute patterns
     await recomputePatterns(req.user.id);
 
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export the authenticated user's full dream archive as a single
+//          JSON dossier. Mirrors the Dream documents but strips the heavy
+//          384-dim embedding vectors and adds a small metadata header.
+// @route   GET /api/dreams/export
+// @access  Private
+const exportDreams = async (req, res, next) => {
+  try {
+    const dreams = await Dream.find({ userId: req.user.id })
+      .select('-embedding -__v')
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const payload = {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      userId: req.user.id,
+      totalDreams: dreams.length,
+      dreams,
+    };
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="dreamsignal-archive-${stamp}.json"`
+    );
+    return res.send(JSON.stringify(payload, null, 2));
   } catch (error) {
     next(error);
   }
@@ -472,5 +535,6 @@ module.exports = {
   deleteDream,
   getDreamStatus,
   streamDreamEvents,
+  exportDreams,
   recomputePatterns // Exported if needed by other routes
 };

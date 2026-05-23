@@ -6,7 +6,8 @@ const {
   getDreamById,
   deleteDream,
   getDreamStatus,
-  streamDreamEvents
+  streamDreamEvents,
+  exportDreams
 } = require('../controllers/dreamController');
 const { protect } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
@@ -15,6 +16,9 @@ router.use(protect); // All dream routes are protected
 
 // POST /api/dreams - Create a new dream note (supports multipart form for audio upload)
 router.post('/', upload.single('audio'), createDream);
+
+// GET /api/dreams/export - Download the entire archive as JSON
+router.get('/export', exportDreams);
 
 // GET /api/dreams - Query paginated lists of dreams
 router.get('/', getDreams);

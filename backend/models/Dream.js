@@ -73,6 +73,33 @@ const DreamSchema = new mongoose.Schema({
     title: String
   }],
 
+  // User-supplied dream metadata, captured on the record form. Independent
+  // of any ML-derived field — these are subjective labels the dreamer
+  // attaches and can later filter / search by.
+  tags: {
+    type: [String],
+    default: [],
+    set: (arr) => Array.isArray(arr)
+      ? Array.from(new Set(arr.map((t) => String(t).trim().toLowerCase()).filter(Boolean)))
+      : [],
+    index: true
+  },
+  isLucid: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  isRecurring: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  isNightmare: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+
   processingStatus: {
     type: String,
     enum: ['pending', 'processing', 'complete', 'failed'],
