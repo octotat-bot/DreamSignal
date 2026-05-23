@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import GuestRoute from './components/GuestRoute';
 import Navbar from './components/Navbar';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -76,9 +77,9 @@ const AppContent = () => {
         <AnimatePresence mode="wait">
           <ErrorBoundary resetKey={location.pathname}>
             <Routes location={location} key={location.pathname}>
-              <Route path="/"       element={<PageWrapper><LandingPage /></PageWrapper>} />
-              <Route path="/login"  element={<PageWrapper><AuthPages  /></PageWrapper>} />
-              <Route path="/signup" element={<PageWrapper><AuthPages  /></PageWrapper>} />
+              <Route path="/"       element={<GuestRoute><PageWrapper><LandingPage /></PageWrapper></GuestRoute>} />
+              <Route path="/login"  element={<GuestRoute><PageWrapper><AuthPages  /></PageWrapper></GuestRoute>} />
+              <Route path="/signup" element={<GuestRoute><PageWrapper><AuthPages  /></PageWrapper></GuestRoute>} />
 
               <Route path="/dashboard" element={
                 <ProtectedRoute><PageWrapper><Dashboard /></PageWrapper></ProtectedRoute>
