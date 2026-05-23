@@ -88,14 +88,16 @@ const RecordPage = () => {
     const iv = setInterval(async () => {
       try {
         const res = await dreamsAPI.getDreamStatus(dreamId);
-        setPollStatus(res.status);
-        if (res.status === 'completed' || res.status === 'failed') {
+        const status = res.processingStatus;
+        setPollStatus(status);
+        if (status === 'complete' || status === 'failed') {
           clearInterval(iv);
-          if (res.status === 'completed') {
+          if (status === 'complete') {
             setTimeout(() => navigate(`/dreams/${dreamId}`), 600);
           } else {
-            toast.error('Analysis failed. File corrupted.');
+            toast.error(res.processingError || 'Analysis failed. File corrupted.');
             setProcessing(false);
+            setDreamId(null);
           }
         }
       } catch {}
@@ -132,25 +134,36 @@ const RecordPage = () => {
 
   /* ── Submit ── */
   const handleSubmit = async () => {
-    if (tab === 'text' && !transcript.trim()) {
-      toast.error('Transcription is empty. Provide testimony.');
+    if (tab === 'text') {
+      const trimmed = transcript.trim();
+      if (!trimmed) {
+        toast.error('Transcription is empty. Provide testimony.');
+        return;
+      }
+      if (trimmed.length < 50) {
+        toast.error('Testimony must be at least 50 characters.');
+        return;
+      }
+    } else if (!audioBlob) {
+      toast.error('No audio recorded.');
       return;
     }
+
     setProcessing(true);
     try {
-      let res;
+      const fd = new FormData();
       if (tab === 'text') {
-        res = await dreamsAPI.submitTextDream(transcript);
-      } else if (audioBlob) {
-        const fd = new FormData();
-        fd.append('audio', audioBlob, 'testimony.webm');
-        res = await dreamsAPI.submitAudioDream(fd);
+        fd.append('inputType', 'text');
+        fd.append('transcript', transcript.trim());
       } else {
-        toast.error('No audio recorded.'); setProcessing(false); return;
+        fd.append('inputType', 'audio');
+        fd.append('audio', audioBlob, 'testimony.webm');
       }
+      const res = await dreamsAPI.createDream(fd);
       setDreamId(res.dreamId);
-    } catch {
-      toast.error('Failed to file report.');
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Failed to file report.';
+      toast.error(msg);
       setProcessing(false);
     }
   };

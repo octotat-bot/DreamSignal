@@ -9,16 +9,22 @@ const STEPS = [
   { key: 'archived',     label: 'ARCHIVED',     statusKey: 'completed'    },
 ];
 
-// Map backend status string → which step indices are done
+// Map backend status string → which step indices are done.
+// The backend only emits 'pending' | 'processing' | 'complete' | 'failed',
+// so we approximate progress: `processing` lights the first three stamps
+// and leaves the interpretation step actively pulsing.
 const getCompletedSteps = (status) => {
   if (!status) return [];
   const s = status.toLowerCase();
-  if (s === 'completed')         return [0,1,2,3,4];
-  if (s === 'analyzing')         return [0,1,2];
-  if (s === 'extracting_symbols')return [0,1];
+  if (s === 'complete' || s === 'completed') return [0, 1, 2, 3, 4];
+  if (s === 'processing')                    return [0, 1, 2];
+  if (s === 'pending' || s === 'failed')     return [];
+  // Legacy granular substage names — preserved in case the backend ever
+  // surfaces finer-grained progress in the future.
+  if (s === 'analyzing')          return [0, 1, 2];
+  if (s === 'extracting_symbols') return [0, 1];
   if (s === 'extracting_emotions')return [0];
-  if (s === 'transcribing')      return [];
-  if (s === 'pending')           return [];
+  if (s === 'transcribing')       return [];
   return [];
 };
 
