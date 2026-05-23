@@ -33,37 +33,10 @@ const AnalyticsPage = () => {
     load();
   }, []);
 
-  if (loading) return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px' }}>
-      {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: '200px', marginBottom: '16px' }} />)}
-    </div>
-  );
-
-  const emotionTrends  = patterns?.emotionTrends  || [];
-  const symbolFreq     = patterns?.symbolFrequency || [];
-  const totalDreams    = patterns?.totalDreams     || 0;
-
-  // Derive dominant emotion: highest dreamCount, tiebreaker = highest averageScore.
-  // The backend stores `dominantEmotionHistory` (one entry per dream), but doesn't
-  // surface a single aggregate value — compute it client-side from emotionTrends.
-  const dominantEmo = emotionTrends.length
-    ? [...emotionTrends].sort((a, b) =>
-        (b.dreamCount - a.dreamCount) || (b.averageScore - a.averageScore)
-      )[0].label || 'N/A'
-    : 'N/A';
-
-  // Frequency % for an emotion = dreams where it was detected / total dreams.
-  const emotionPct = (e) => (totalDreams > 0 ? (e.dreamCount / totalDreams) * 100 : 0);
-
-  // Build intensity over time from all dreams
-  const intensityData = allDreams.slice().reverse().map((d, i) => ({
-    name: `#${String(i + 1).padStart(2,'0')}`,
-    intensity: d.emotions?.reduce((max, e) => Math.max(max, e.score), 0) * 100 || 0,
-  }));
-
   // Build deduplicated cross-reference links from each dream's `relatedDreams`
   // (populated by the embedding-similarity step in the AI service). Each pair
   // is keyed by sorted IDs so A↔B and B↔A only show up once.
+  // NOTE: must stay above any early return — see Rules of Hooks.
   const relatedLinks = useMemo(() => {
     if (!allDreams.length) return [];
     const titleMap = new Map(
@@ -93,6 +66,34 @@ const AnalyticsPage = () => {
     links.sort((a, b) => b.similarity - a.similarity);
     return links;
   }, [allDreams]);
+
+  if (loading) return (
+    <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px' }}>
+      {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: '200px', marginBottom: '16px' }} />)}
+    </div>
+  );
+
+  const emotionTrends  = patterns?.emotionTrends  || [];
+  const symbolFreq     = patterns?.symbolFrequency || [];
+  const totalDreams    = patterns?.totalDreams     || 0;
+
+  // Derive dominant emotion: highest dreamCount, tiebreaker = highest averageScore.
+  // The backend stores `dominantEmotionHistory` (one entry per dream), but doesn't
+  // surface a single aggregate value — compute it client-side from emotionTrends.
+  const dominantEmo = emotionTrends.length
+    ? [...emotionTrends].sort((a, b) =>
+        (b.dreamCount - a.dreamCount) || (b.averageScore - a.averageScore)
+      )[0].label || 'N/A'
+    : 'N/A';
+
+  // Frequency % for an emotion = dreams where it was detected / total dreams.
+  const emotionPct = (e) => (totalDreams > 0 ? (e.dreamCount / totalDreams) * 100 : 0);
+
+  // Build intensity over time from all dreams
+  const intensityData = allDreams.slice().reverse().map((d, i) => ({
+    name: `#${String(i + 1).padStart(2,'0')}`,
+    intensity: d.emotions?.reduce((max, e) => Math.max(max, e.score), 0) * 100 || 0,
+  }));
 
   // Emotion pie (kept in case a pie panel is reintroduced)
   const pieData = emotionTrends.map(e => ({ name: e.label, value: emotionPct(e) }));
