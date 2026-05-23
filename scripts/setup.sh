@@ -3,7 +3,7 @@
 # Dream Signal — Setup Script
 # Installs all dependencies for backend, ai-service, and frontend.
 # Run once before starting the app for the first time.
-# Usage: bash setup.sh
+# Usage: bash scripts/setup.sh   (run from the repo root)
 # =============================================================================
 
 set -euo pipefail
@@ -17,6 +17,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Colour
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
 success() { echo -e "${GREEN}[OK]${NC}    $*"; }
@@ -71,8 +72,8 @@ fi
 # =============================================================================
 header "Creating Storage Directories"
 
-mkdir -p "$SCRIPT_DIR/storage/audio"
-mkdir -p "$SCRIPT_DIR/storage/temp"
+mkdir -p "$REPO_ROOT/storage/audio"
+mkdir -p "$REPO_ROOT/storage/temp"
 success "storage/audio  and  storage/temp  ready"
 
 # =============================================================================
@@ -90,15 +91,15 @@ check_env() {
   fi
 }
 
-check_env "$SCRIPT_DIR/backend/.env"    "backend/.env"
-check_env "$SCRIPT_DIR/ai-service/.env" "ai-service/.env"
-check_env "$SCRIPT_DIR/frontend/.env"   "frontend/.env"
+check_env "$REPO_ROOT/backend/.env"    "backend/.env"
+check_env "$REPO_ROOT/ai-service/.env" "ai-service/.env"
+check_env "$REPO_ROOT/frontend/.env"   "frontend/.env"
 
 # Warn if placeholder API keys are still present
-if grep -q "YOUR_GEMINI_API_KEY" "$SCRIPT_DIR/ai-service/.env" 2>/dev/null; then
+if grep -q "YOUR_GEMINI_API_KEY" "$REPO_ROOT/ai-service/.env" 2>/dev/null; then
   warn "ai-service/.env still has placeholder GEMINI_API_KEY — update before running."
 fi
-if grep -q "YOUR_HUGGINGFACE_API_KEY" "$SCRIPT_DIR/ai-service/.env" 2>/dev/null; then
+if grep -q "YOUR_HUGGINGFACE_API_KEY" "$REPO_ROOT/ai-service/.env" 2>/dev/null; then
   warn "ai-service/.env still has placeholder HUGGINGFACE_API_KEY — update before running."
 fi
 
@@ -107,7 +108,7 @@ fi
 # =============================================================================
 header "Installing Backend Dependencies (Node.js)"
 
-cd "$SCRIPT_DIR/backend"
+cd "$REPO_ROOT/backend"
 npm install
 success "backend/node_modules installed"
 
@@ -116,7 +117,7 @@ success "backend/node_modules installed"
 # =============================================================================
 header "Installing Frontend Dependencies (React + Vite)"
 
-cd "$SCRIPT_DIR/frontend"
+cd "$REPO_ROOT/frontend"
 npm install
 success "frontend/node_modules installed"
 
@@ -125,7 +126,7 @@ success "frontend/node_modules installed"
 # =============================================================================
 header "Setting Up Python Virtual Environment (ai-service)"
 
-cd "$SCRIPT_DIR/ai-service"
+cd "$REPO_ROOT/ai-service"
 
 if [[ ! -d "venv" ]]; then
   python3 -m venv venv
@@ -150,7 +151,7 @@ echo -e "${GREEN}${BOLD}╔═════════════════�
 echo -e "${GREEN}${BOLD}║       Dream Signal setup complete! ✓             ║${NC}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  Next step:  ${CYAN}bash start.sh${NC}"
+echo -e "  Next step:  ${CYAN}bash scripts/start.sh${NC}"
 echo ""
 echo -e "  ${YELLOW}Remember to add your API keys to ai-service/.env:${NC}"
 echo -e "    GEMINI_API_KEY=...       → https://aistudio.google.com/app/apikey"

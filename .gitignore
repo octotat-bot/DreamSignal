@@ -27,9 +27,9 @@ Thumbs.db
 *.swp
 *.swo
 
-# Seed / test scripts
-seed_dreams.js
-requirements_patch.py
+# Python bytecode caches
+__pycache__/
+*.pyc
 
 # Vite
 .vite/

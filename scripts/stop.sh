@@ -3,7 +3,7 @@
 # Dream Signal — Stop Script
 # Kills any services still listening on ports 5001, 5173, and 8000.
 # Useful if start.sh was interrupted without a clean Ctrl+C.
-# Usage: bash stop.sh
+# Usage: bash scripts/stop.sh   (run from the repo root)
 # =============================================================================
 
 RED='\033[0;31m'

@@ -86,6 +86,10 @@ dream/
 │   │   └── index.css       # Custom scrollbars & glassmorphism styling
 │   ├── package.json        # Frontend NPM packages
 │   └── tailwind.config.js  # Theme extensions & custom palettes
+├── scripts/                # Lifecycle scripts
+│   ├── setup.sh            # One-time install (Node, Python venv, env files)
+│   ├── start.sh            # Launches all three services with prefixed logs
+│   └── stop.sh             # Kills anything left on ports 5001 / 5173 / 8000
 └── storage/                # Media storage directory
     ├── audio/              # Transferred webm files
     └── temp/               # Temporary uploads

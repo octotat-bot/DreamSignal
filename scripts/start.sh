@@ -6,7 +6,7 @@
 #   - Express Backend  → http://localhost:5001
 #   - React Frontend   → http://localhost:5173
 #
-# Usage:  bash start.sh
+# Usage:  bash scripts/start.sh   (run from the repo root)
 # Stop:   Ctrl+C  (gracefully kills all three)
 # =============================================================================
 
@@ -23,6 +23,7 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # PIDs for cleanup
 AI_PID=0
@@ -60,28 +61,28 @@ echo -e "${BOLD}${CYAN}╚══════════════════
 echo ""
 
 # Backend node_modules
-if [[ ! -d "$SCRIPT_DIR/backend/node_modules" ]]; then
-  echo -e "${YELLOW}[WARN]${NC}  backend/node_modules missing — run: bash setup.sh"
+if [[ ! -d "$REPO_ROOT/backend/node_modules" ]]; then
+  echo -e "${YELLOW}[WARN]${NC}  backend/node_modules missing — run: bash scripts/setup.sh"
   exit 1
 fi
 
 # Frontend node_modules
-if [[ ! -d "$SCRIPT_DIR/frontend/node_modules" ]]; then
-  echo -e "${YELLOW}[WARN]${NC}  frontend/node_modules missing — run: bash setup.sh"
+if [[ ! -d "$REPO_ROOT/frontend/node_modules" ]]; then
+  echo -e "${YELLOW}[WARN]${NC}  frontend/node_modules missing — run: bash scripts/setup.sh"
   exit 1
 fi
 
 # Python venv
-if [[ ! -d "$SCRIPT_DIR/ai-service/venv" ]]; then
-  echo -e "${YELLOW}[WARN]${NC}  ai-service/venv missing — run: bash setup.sh"
+if [[ ! -d "$REPO_ROOT/ai-service/venv" ]]; then
+  echo -e "${YELLOW}[WARN]${NC}  ai-service/venv missing — run: bash scripts/setup.sh"
   exit 1
 fi
 
 # API keys warning (non-fatal)
-if grep -q "YOUR_GEMINI_API_KEY" "$SCRIPT_DIR/ai-service/.env" 2>/dev/null; then
+if grep -q "YOUR_GEMINI_API_KEY" "$REPO_ROOT/ai-service/.env" 2>/dev/null; then
   echo -e "${YELLOW}[WARN]${NC}  GEMINI_API_KEY is still a placeholder in ai-service/.env"
 fi
-if grep -q "YOUR_HUGGINGFACE_API_KEY" "$SCRIPT_DIR/ai-service/.env" 2>/dev/null; then
+if grep -q "YOUR_HUGGINGFACE_API_KEY" "$REPO_ROOT/ai-service/.env" 2>/dev/null; then
   echo -e "${YELLOW}[WARN]${NC}  HUGGINGFACE_API_KEY is still a placeholder in ai-service/.env"
 fi
 
@@ -91,7 +92,7 @@ fi
 echo -e "${MAGENTA}[AI-SVC]${NC}   Starting FastAPI on http://localhost:8000 ..."
 
 (
-  cd "$SCRIPT_DIR/ai-service"
+  cd "$REPO_ROOT/ai-service"
   source venv/bin/activate
   exec uvicorn main:app --host 127.0.0.1 --port 8000 --reload 2>&1
 ) | log_ai &
@@ -103,7 +104,7 @@ AI_PID=$!
 echo -e "${CYAN}[BACKEND]${NC}  Starting Express on http://localhost:5001 ..."
 
 (
-  cd "$SCRIPT_DIR/backend"
+  cd "$REPO_ROOT/backend"
   exec npm run dev 2>&1
 ) | log_backend &
 BACKEND_PID=$!
@@ -114,7 +115,7 @@ BACKEND_PID=$!
 echo -e "${BLUE}[FRONTEND]${NC} Starting Vite on http://localhost:5173 ..."
 
 (
-  cd "$SCRIPT_DIR/frontend"
+  cd "$REPO_ROOT/frontend"
   exec npm run dev 2>&1
 ) | log_frontend &
 FRONTEND_PID=$!
