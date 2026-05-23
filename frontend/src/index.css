@@ -1,0 +1,366 @@
+@import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════
+   DESIGN TOKENS — CLASSIFIED
+   ═══════════════════════════════════════════════════ */
+:root {
+  --paper:        #f2ead8;
+  --paper-dark:   #e8dcc4;
+  --paper-stain:  #d4c4a0;
+  --ink:          #1a1510;
+  --ink-faded:    #3d3528;
+  --redact:       #0f0e0c;
+  --stamp-red:    #8b1a1a;
+  --stamp-blue:   #1a3a5c;
+  --safelight:    #6b1a0a;
+  --fixer:        #b8860b;
+  --silver:       #8a8070;
+  --film-clear:   #f8f4ea;
+}
+
+/* ═══════════════════════════════════════════════════
+   BASE RESET
+   ═══════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: 'Courier Prime', 'Courier New', monospace;
+  font-size: 15px;
+  line-height: 1.9;
+  overflow-x: hidden;
+  min-height: 100vh;
+  /* Paper texture overlay */
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='0.06'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* ═══════════════════════════════════════════════════
+   TYPOGRAPHY SYSTEM
+   ═══════════════════════════════════════════════════ */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Special Elite', serif;
+  color: var(--ink);
+  line-height: 1.3;
+  font-weight: 400;
+}
+
+.font-display { font-family: 'Special Elite', serif !important; }
+.font-body    { font-family: 'Courier Prime', monospace !important; }
+.font-mono    { font-family: 'Share Tech Mono', monospace !important; }
+
+.case-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--silver);
+}
+
+/* ═══════════════════════════════════════════════════
+   PAPER CARD — Base container
+   ═══════════════════════════════════════════════════ */
+.dossier-card {
+  background-color: var(--paper-dark);
+  border: 1px solid rgba(26,21,16,0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Film grain on all cards */
+.dossier-card::after {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23g)'/%3E%3C/svg%3E");
+  animation: grain 0.4s steps(1) infinite;
+  z-index: 10;
+}
+
+/* ═══════════════════════════════════════════════════
+   NEGATIVE STRIP — Film border on dream cards
+   ═══════════════════════════════════════════════════ */
+.negative-frame {
+  border: 8px solid var(--redact);
+  box-shadow: inset 0 0 0 2px var(--fixer);
+  position: relative;
+}
+
+/* Sprocket holes left side */
+.negative-frame::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 8px,
+    var(--fixer) 8px,
+    var(--fixer) 12px,
+    transparent 12px,
+    transparent 18px
+  );
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Sprocket holes right side */
+.negative-frame::after {
+  content: '';
+  position: absolute;
+  right: -20px;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 8px,
+    var(--fixer) 8px,
+    var(--fixer) 12px,
+    transparent 12px,
+    transparent 18px
+  );
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════
+   STAMP COMPONENT
+   ═══════════════════════════════════════════════════ */
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid currentColor;
+  border-radius: 2px;
+  padding: 2px 8px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.stamp-red  { color: var(--stamp-red);  }
+.stamp-blue { color: var(--stamp-blue); }
+.stamp-fixer { color: var(--fixer);     }
+.stamp-silver { color: var(--silver);   }
+
+/* ═══════════════════════════════════════════════════
+   REDACTION BAR
+   ═══════════════════════════════════════════════════ */
+.redact-bar {
+  display: inline-block;
+  height: 1.3em;
+  background-color: var(--redact);
+  transform: rotate(-0.3deg);
+  vertical-align: middle;
+}
+
+/* ═══════════════════════════════════════════════════
+   TORN PAPER EDGE — bottom of sections
+   ═══════════════════════════════════════════════════ */
+.torn-bottom {
+  position: relative;
+}
+.torn-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: -12px;
+  left: 0;
+  right: 0;
+  height: 14px;
+  background-color: var(--paper);
+  clip-path: polygon(
+    0% 0%, 3% 100%, 6% 20%, 9% 90%, 12% 10%, 15% 80%,
+    18% 5%, 21% 95%, 24% 15%, 27% 85%, 30% 0%, 33% 90%,
+    36% 20%, 39% 100%, 42% 10%, 45% 80%, 48% 5%, 51% 95%,
+    54% 15%, 57% 85%, 60% 0%, 63% 90%, 66% 20%, 69% 100%,
+    72% 10%, 75% 80%, 78% 5%, 81% 95%, 84% 15%, 87% 85%,
+    90% 0%, 93% 90%, 96% 20%, 100% 100%, 100% 0%
+  );
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════
+   LINED PAPER BACKGROUND — textarea/transcript
+   ═══════════════════════════════════════════════════ */
+.lined-paper {
+  background-color: var(--film-clear);
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 27px,
+      rgba(26,21,16,0.12) 27px,
+      rgba(26,21,16,0.12) 28px
+    );
+  background-size: 100% 28px;
+}
+
+/* ═══════════════════════════════════════════════════
+   COFFEE RING — decorative
+   ═══════════════════════════════════════════════════ */
+.coffee-ring {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  transform: scaleY(0.92);
+}
+.coffee-ring-outer {
+  width: 120px;
+  height: 120px;
+  border: 2px solid rgba(180,130,60,0.10);
+}
+.coffee-ring-inner {
+  width: 90px;
+  height: 90px;
+  border: 1px solid rgba(180,130,60,0.07);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scaleY(0.92);
+}
+
+/* ═══════════════════════════════════════════════════
+   FILM DEVELOP ANIMATION
+   ═══════════════════════════════════════════════════ */
+.develop-reveal {
+  animation: develop 2.4s ease-out forwards;
+}
+
+/* ═══════════════════════════════════════════════════
+   DOCUMENT DIVIDER
+   ═══════════════════════════════════════════════════ */
+.doc-divider {
+  border: none;
+  border-top: 1px dashed rgba(61,53,40,0.4);
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   TYPEWRITER CURSOR
+   ═══════════════════════════════════════════════════ */
+.tw-cursor {
+  color: var(--stamp-red);
+  animation: blink 1s step-end infinite;
+  margin-left: 1px;
+}
+
+/* ═══════════════════════════════════════════════════
+   SAFELIGHT GLOW — ambient darkroom effect
+   ═══════════════════════════════════════════════════ */
+.safelight-glow {
+  box-shadow: 0 0 40px 8px rgba(107,26,10,0.15);
+  animation: pulseRed 2s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════
+   BUTTON STYLES
+   ═══════════════════════════════════════════════════ */
+.btn-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: opacity 0.2s, background-color 0.2s;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.btn-stamp:hover { opacity: 1; background-color: rgba(26,21,16,0.06); }
+
+.btn-stamp-red  { color: var(--stamp-red); }
+.btn-stamp-blue { color: var(--stamp-blue); }
+.btn-stamp-ink  { color: var(--ink); }
+.btn-stamp-primary {
+  background-color: var(--stamp-red);
+  color: var(--paper);
+  border-color: var(--stamp-red);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
+}
+.btn-stamp-primary:hover { background-color: #7a1515; }
+
+/* ═══════════════════════════════════════════════════
+   INPUT STYLES
+   ═══════════════════════════════════════════════════ */
+.doc-input {
+  background-color: var(--film-clear);
+  border: 1px solid rgba(26,21,16,0.35);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: 'Courier Prime', monospace;
+  font-size: 14px;
+  padding: 10px 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.doc-input:focus { border-color: var(--ink); }
+.doc-input::placeholder { color: var(--silver); }
+
+/* ═══════════════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--paper-dark); }
+::-webkit-scrollbar-thumb { background: var(--paper-stain); border-radius: 0; }
+
+/* ═══════════════════════════════════════════════════
+   SKELETON
+   ═══════════════════════════════════════════════════ */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--paper-dark) 0%,
+    var(--paper-stain) 50%,
+    var(--paper-dark) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Recharts overrides */
+.recharts-cartesian-axis-tick-value {
+  font-family: 'Share Tech Mono', monospace !important;
+  fill: var(--ink-faded) !important;
+  font-size: 11px !important;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: var(--paper-dark) !important;
+  border: 1px solid var(--ink-faded) !important;
+  border-radius: 0 !important;
+  font-family: 'Courier Prime', monospace !important;
+}

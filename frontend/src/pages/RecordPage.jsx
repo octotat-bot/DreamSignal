@@ -1,0 +1,411 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useToast } from '../context/ToastContext';
+import { dreamsAPI } from '../api/api';
+import { motion, AnimatePresence } from 'framer-motion';
+import ProcessingStamps from '../components/ProcessingStamps';
+import CoffeeRing from '../components/CoffeeRing';
+
+const CanvasWaveform = ({ stream }) => {
+  const canvasRef    = useRef(null);
+  const animationRef = useRef(null);
+  const audioCtxRef  = useRef(null);
+  const analyserRef  = useRef(null);
+
+  useEffect(() => {
+    if (!stream) return;
+    audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    analyserRef.current = audioCtxRef.current.createAnalyser();
+    analyserRef.current.fftSize = 128;
+    const src = audioCtxRef.current.createMediaStreamSource(stream);
+    src.connect(analyserRef.current);
+
+    const canvas = canvasRef.current;
+    const ctx    = canvas.getContext('2d');
+    const buf    = new Uint8Array(analyserRef.current.frequencyBinCount);
+
+    const draw = () => {
+      animationRef.current = requestAnimationFrame(draw);
+      analyserRef.current.getByteFrequencyData(buf);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(232,220,196,0.05)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const bw = canvas.width / buf.length;
+      buf.forEach((v, i) => {
+        const h = (v / 255) * canvas.height * 0.8;
+        ctx.fillStyle = `rgba(184, 134, 11, ${0.4 + (v / 255) * 0.6})`;
+        ctx.fillRect(i * bw, canvas.height - h, bw - 1, h);
+      });
+    };
+    draw();
+    return () => {
+      cancelAnimationFrame(animationRef.current);
+      audioCtxRef.current?.close();
+    };
+  }, [stream]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={320}
+      height={60}
+      style={{ width: '100%', height: '60px', backgroundColor: 'var(--redact)' }}
+    />
+  );
+};
+
+const RecordPage = () => {
+  const navigate = useNavigate();
+  const toast    = useToast();
+
+  const [tab,        setTab]        = useState('voice');
+  const [recording,  setRecording]  = useState(false);
+  const [stream,     setStream]     = useState(null);
+  const [audioBlob,  setAudioBlob]  = useState(null);
+  const [elapsed,    setElapsed]    = useState(0);
+  const [transcript, setTranscript] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const [dreamId,    setDreamId]    = useState(null);
+  const [pollStatus, setPollStatus] = useState(null);
+
+  const mediaRef    = useRef(null);
+  const chunksRef   = useRef([]);
+  const timerRef    = useRef(null);
+
+  /* ── Timer ── */
+  useEffect(() => {
+    if (recording) {
+      timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [recording]);
+
+  /* ── Poll backend status ── */
+  useEffect(() => {
+    if (!dreamId) return;
+    const iv = setInterval(async () => {
+      try {
+        const res = await dreamsAPI.getDreamStatus(dreamId);
+        setPollStatus(res.status);
+        if (res.status === 'completed' || res.status === 'failed') {
+          clearInterval(iv);
+          if (res.status === 'completed') {
+            setTimeout(() => navigate(`/dreams/${dreamId}`), 600);
+          } else {
+            toast.error('Analysis failed. File corrupted.');
+            setProcessing(false);
+          }
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [dreamId]);
+
+  /* ── Recording ── */
+  const startRecording = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setStream(s);
+      chunksRef.current = [];
+      mediaRef.current  = new MediaRecorder(s);
+      mediaRef.current.ondataavailable = e => chunksRef.current.push(e.data);
+      mediaRef.current.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        setStream(null);
+      };
+      mediaRef.current.start();
+      setElapsed(0);
+      setRecording(true);
+    } catch {
+      toast.error('Microphone access denied.');
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRef.current?.stop();
+    stream?.getTracks().forEach(t => t.stop());
+    setRecording(false);
+  };
+
+  /* ── Submit ── */
+  const handleSubmit = async () => {
+    if (tab === 'text' && !transcript.trim()) {
+      toast.error('Transcription is empty. Provide testimony.');
+      return;
+    }
+    setProcessing(true);
+    try {
+      let res;
+      if (tab === 'text') {
+        res = await dreamsAPI.submitTextDream(transcript);
+      } else if (audioBlob) {
+        const fd = new FormData();
+        fd.append('audio', audioBlob, 'testimony.webm');
+        res = await dreamsAPI.submitAudioDream(fd);
+      } else {
+        toast.error('No audio recorded.'); setProcessing(false); return;
+      }
+      setDreamId(res.dreamId);
+    } catch {
+      toast.error('Failed to file report.');
+      setProcessing(false);
+    }
+  };
+
+  const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+
+  /* ── Processing view ── */
+  if (processing || dreamId) {
+    return (
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '64px 48px', textAlign: 'center' }}>
+        <div className="case-label" style={{ marginBottom: '16px' }}>CASE BEING DEVELOPED</div>
+        <h2 style={{ fontFamily: '"Special Elite", serif', fontSize: '1.8rem', marginBottom: '12px', color: 'var(--ink)' }}>
+          Developing Film...
+        </h2>
+        <p style={{ fontFamily: '"Courier Prime", monospace', fontSize: '13px', color: 'var(--silver)', marginBottom: '48px', lineHeight: 1.9 }}>
+          Your testimony is being processed. Do not leave the darkroom.
+        </p>
+
+        <div className="dossier-card" style={{ padding: '40px' }}>
+          <ProcessingStamps status={pollStatus || 'pending'} />
+        </div>
+
+        <p style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.6rem', color: 'var(--silver)', marginTop: '24px', letterSpacing: '0.1em' }}>
+          STATUS: {(pollStatus || 'PENDING').toUpperCase().replace('_',' ')}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px', position: 'relative' }}>
+      <CoffeeRing style={{ top: '0px', right: '40px' }} />
+
+      {/* Page header */}
+      <div style={{ borderBottom: '2px solid var(--ink)', paddingBottom: '16px', marginBottom: '40px' }}>
+        <div className="case-label" style={{ marginBottom: '4px' }}>TESTIMONY INTAKE — FORM DS-02</div>
+        <h1 style={{ fontFamily: '"Special Elite", serif', fontSize: '2rem', color: 'var(--ink)', margin: 0 }}>
+          File New Report
+        </h1>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', alignItems: 'start' }}>
+
+        {/* LEFT — Load Film */}
+        <div className="dossier-card" style={{ padding: '32px' }}>
+          <div className="case-label" style={{ marginBottom: '24px' }}>LOAD FILM / VOICE TESTIMONY</div>
+
+          {/* Tabs — folder style */}
+          <div style={{ display: 'flex', gap: '1px', marginBottom: '24px', backgroundColor: 'rgba(61,53,40,0.2)' }}>
+            {[
+              { key: 'voice', label: 'VOICE TESTIMONY' },
+              { key: 'text',  label: 'WRITTEN STATEMENT' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontFamily: '"Share Tech Mono", monospace',
+                  fontSize: '0.6rem',
+                  letterSpacing: '0.12em',
+                  backgroundColor: tab === key ? 'var(--paper-dark)' : 'var(--paper-stain)',
+                  color: tab === key ? 'var(--ink)' : 'var(--silver)',
+                  border: 'none',
+                  borderBottom: tab === key ? '2px solid var(--ink)' : '2px solid transparent',
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <AnimatePresence mode="wait">
+            {tab === 'voice' ? (
+              <motion.div
+                key="voice"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{ textAlign: 'center' }}
+              >
+                {/* Film canister (CSS only) */}
+                <div style={{ position: 'relative', display: 'inline-block', marginBottom: '24px' }}>
+                  {/* Canister body */}
+                  <div style={{
+                    width: '80px',
+                    height: '100px',
+                    backgroundColor: 'var(--redact)',
+                    borderRadius: '8px 8px 4px 4px',
+                    margin: '0 auto',
+                    border: '2px solid var(--fixer)',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '3px solid var(--fixer)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'var(--fixer)' }} />
+                    </div>
+                    {/* Sprocket strip */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '-12px',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: '50px',
+                      height: '14px',
+                      backgroundColor: 'var(--redact)',
+                      border: '1px solid var(--fixer)',
+                      borderRadius: '3px',
+                    }} />
+                  </div>
+                </div>
+
+                {/* Record button */}
+                <div style={{ marginBottom: '20px' }}>
+                  <button
+                    onClick={recording ? stopRecording : startRecording}
+                    className={recording ? 'safelight-glow' : ''}
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      borderRadius: '50%',
+                      backgroundColor: recording ? 'var(--stamp-red)' : 'var(--redact)',
+                      border: `3px solid var(--fixer)`,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.3s',
+                      margin: '0 auto',
+                    }}
+                  >
+                    <div style={{
+                      width: recording ? '24px' : '28px',
+                      height: recording ? '24px' : '28px',
+                      borderRadius: recording ? '3px' : '50%',
+                      backgroundColor: 'var(--fixer)',
+                      transition: 'all 0.3s',
+                    }} />
+                  </button>
+                </div>
+
+                {/* Timer */}
+                <div style={{
+                  fontFamily: '"Share Tech Mono", monospace',
+                  fontSize: '1.6rem',
+                  color: recording ? 'var(--stamp-red)' : 'var(--ink)',
+                  letterSpacing: '0.1em',
+                  marginBottom: '4px',
+                }}>
+                  {fmtTime(elapsed)}
+                </div>
+                <div className="case-label" style={{ marginBottom: '16px' }}>
+                  {recording ? '● RECORDING EXPOSURE' : audioBlob ? '◆ TESTIMONY CAPTURED' : '○ STANDBY'}
+                </div>
+
+                {stream && <CanvasWaveform stream={stream} />}
+
+                {audioBlob && !recording && (
+                  <div style={{ marginTop: '16px' }}>
+                    <audio controls src={URL.createObjectURL(audioBlob)} style={{ width: '100%' }} />
+                  </div>
+                )}
+              </motion.div>
+            ) : (
+              <motion.div key="text" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <textarea
+                  value={transcript}
+                  onChange={e => setTranscript(e.target.value)}
+                  className="lined-paper"
+                  placeholder="Begin transcription. Details matter. Note persons, objects, environments, and emotional states."
+                  rows={10}
+                  style={{
+                    width: '100%',
+                    fontFamily: '"Courier Prime", monospace',
+                    fontSize: '14px',
+                    color: 'var(--ink)',
+                    lineHeight: '28px',
+                    padding: '8px 16px',
+                    border: '1px solid rgba(26,21,16,0.3)',
+                    resize: 'vertical',
+                    outline: 'none',
+                  }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* RIGHT — Case File Form */}
+        <div>
+          <div className="dossier-card" style={{ padding: '32px', marginBottom: '1px' }}>
+            <div className="case-label" style={{ marginBottom: '20px' }}>CASE FILE INSTRUCTIONS</div>
+            <div style={{ borderLeft: '3px solid var(--fixer)', paddingLeft: '16px', marginBottom: '24px' }}>
+              <p style={{ fontFamily: '"Courier Prime", monospace', fontSize: '13px', color: 'var(--ink-faded)', lineHeight: 1.9, margin: 0 }}>
+                Provide as much detail as possible. The system extracts emotional signals, symbolic content, and cross-references with your previous case files.
+              </p>
+            </div>
+
+            <div style={{ borderTop: '1px dashed rgba(61,53,40,0.3)', paddingTop: '20px' }}>
+              <div className="case-label" style={{ marginBottom: '8px' }}>PROCESSING PROTOCOL</div>
+              {[
+                'Voice → Transcription via Whisper',
+                'Emotional spectrum extraction (7 axes)',
+                'Symbol identification & classification',
+                'Gemini AI psychological interpretation',
+                'Cross-reference with prior cases',
+              ].map((step, i) => (
+                <div key={i} style={{
+                  display: 'flex',
+                  gap: '12px',
+                  padding: '6px 0',
+                  borderBottom: '1px dashed rgba(61,53,40,0.15)',
+                  fontFamily: '"Courier Prime", monospace',
+                  fontSize: '12px',
+                  color: 'var(--ink-faded)',
+                }}>
+                  <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--silver)', flexShrink: 0, paddingTop: '2px' }}>
+                    {String(i + 1).padStart(2,'0')}
+                  </span>
+                  {step}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Submit */}
+          <div style={{ padding: '24px 0' }}>
+            <button
+              onClick={handleSubmit}
+              disabled={processing}
+              className="btn-stamp btn-stamp-primary"
+              style={{ width: '100%', justifyContent: 'center', fontSize: '0.75rem' }}
+            >
+              ▶ FILE REPORT FOR ANALYSIS
+            </button>
+            <p style={{
+              fontFamily: '"Share Tech Mono", monospace',
+              fontSize: '0.55rem',
+              color: 'var(--silver)',
+              letterSpacing: '0.1em',
+              marginTop: '10px',
+              textAlign: 'center',
+            }}>
+              ONCE FILED, THIS REPORT CANNOT BE ALTERED
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RecordPage;
