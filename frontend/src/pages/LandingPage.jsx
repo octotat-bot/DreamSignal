@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import CoffeeRing from '../components/CoffeeRing';
 
+
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.7, delay, ease: [0.16, 1, 0.3, 1] } },
@@ -38,9 +39,9 @@ const LandingPage = () => (
     overflow: 'hidden',
   }}>
 
-    {/* Decorative coffee rings */}
-    <CoffeeRing style={{ position: 'absolute', top: '80px', right: '60px', opacity: 0.8 }} />
-    <CoffeeRing style={{ position: 'absolute', bottom: '200px', left: '-30px', opacity: 0.6 }} />
+    {/* Coffee stains — SVG organic blobs, like aged document */}
+    <CoffeeRing size={190} seed={7}  style={{ top: '-30px',   right: '-30px'  }} opacity={0.9} />
+    <CoffeeRing size={120} seed={13} style={{ bottom: '180px', left: '-25px'  }} opacity={0.8} />
 
     {/* Safelight corner glow */}
     <div style={{
