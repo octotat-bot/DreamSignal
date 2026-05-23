@@ -42,9 +42,16 @@ const Dashboard = () => {
     load();
   }, []);
 
-  const totalDreams  = patterns?.totalDreams    || 0;
-  const dominantEmo  = patterns?.dominantEmotion || 'NONE';
-  const emotionTrends = patterns?.emotionTrends  || [];
+  const totalDreams   = patterns?.totalDreams      || 0;
+  const emotionTrends = patterns?.emotionTrends    || [];
+  const symbolFreq    = patterns?.symbolFrequency  || [];
+  // Backend returns `dominantEmotionHistory` but no single aggregate; derive it
+  // from the trends array (highest dreamCount, tiebreaker = averageScore).
+  const dominantEmo = emotionTrends.length
+    ? [...emotionTrends].sort((a, b) =>
+        (b.dreamCount - a.dreamCount) || (b.averageScore - a.averageScore)
+      )[0].label || 'NONE'
+    : 'NONE';
   const lastDate     = recentDreams[0]?.createdAt ? formatDateShort(recentDreams[0].createdAt) : 'N/A';
 
   if (loading) return (
@@ -131,7 +138,7 @@ const Dashboard = () => {
         {[
           { label: 'CASES FILED',       value: totalDreams,               sub: 'total archived'   },
           { label: 'DOMINANT SIGNAL',   value: dominantEmo.toUpperCase(), sub: 'emotional index'  },
-          { label: 'RECURRING SYMBOLS', value: emotionTrends.length,      sub: 'detected patterns'},
+          { label: 'RECURRING SYMBOLS', value: symbolFreq.length,         sub: 'detected patterns'},
           { label: 'LAST EXPOSURE',     value: lastDate,                  sub: 'most recent entry'},
         ].map(({ label, value, sub }, i) => (
           <div key={label} className="dossier-card" style={{ padding: '20px 24px' }}>
@@ -289,26 +296,29 @@ const Dashboard = () => {
           {emotionTrends.length > 0 && (
             <div className="dossier-card" style={{ padding: '24px', marginTop: '1px' }}>
               <div className="case-label" style={{ marginBottom: '16px' }}>SIGNAL SPECTRUM</div>
-              {emotionTrends.slice(0, 5).map(({ emotion, percentage }, i) => (
-                <div key={emotion} style={{ marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.6rem', letterSpacing: '0.1em', color: 'var(--ink-faded)', textTransform: 'uppercase' }}>
-                      {emotion}
-                    </span>
-                    <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.6rem', color: 'var(--silver)' }}>
-                      {(percentage || 0).toFixed(0)}%
-                    </span>
+              {emotionTrends.slice(0, 5).map((e, i) => {
+                const pct = totalDreams > 0 ? (e.dreamCount / totalDreams) * 100 : 0;
+                return (
+                  <div key={e.label} style={{ marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.6rem', letterSpacing: '0.1em', color: 'var(--ink-faded)', textTransform: 'uppercase' }}>
+                        {e.label}
+                      </span>
+                      <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.6rem', color: 'var(--silver)' }}>
+                        {pct.toFixed(0)}%
+                      </span>
+                    </div>
+                    <div style={{ height: '3px', backgroundColor: 'rgba(61,53,40,0.15)', position: 'relative' }}>
+                      <motion.div
+                        style={{ position: 'absolute', left: 0, top: 0, height: '100%', backgroundColor: 'var(--fixer)' }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.9, delay: 0.3 + i * 0.1 }}
+                      />
+                    </div>
                   </div>
-                  <div style={{ height: '3px', backgroundColor: 'rgba(61,53,40,0.15)', position: 'relative' }}>
-                    <motion.div
-                      style={{ position: 'absolute', left: 0, top: 0, height: '100%', backgroundColor: 'var(--fixer)' }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${percentage || 0}%` }}
-                      transition={{ duration: 0.9, delay: 0.3 + i * 0.1 }}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

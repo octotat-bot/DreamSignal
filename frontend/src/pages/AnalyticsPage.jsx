@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { analyticsAPI, dreamsAPI } from '../api/api';
 import { useToast } from '../context/ToastContext';
 import { motion } from 'framer-motion';
@@ -41,7 +42,18 @@ const AnalyticsPage = () => {
   const emotionTrends  = patterns?.emotionTrends  || [];
   const symbolFreq     = patterns?.symbolFrequency || [];
   const totalDreams    = patterns?.totalDreams     || 0;
-  const dominantEmo    = patterns?.dominantEmotion || 'N/A';
+
+  // Derive dominant emotion: highest dreamCount, tiebreaker = highest averageScore.
+  // The backend stores `dominantEmotionHistory` (one entry per dream), but doesn't
+  // surface a single aggregate value — compute it client-side from emotionTrends.
+  const dominantEmo = emotionTrends.length
+    ? [...emotionTrends].sort((a, b) =>
+        (b.dreamCount - a.dreamCount) || (b.averageScore - a.averageScore)
+      )[0].label || 'N/A'
+    : 'N/A';
+
+  // Frequency % for an emotion = dreams where it was detected / total dreams.
+  const emotionPct = (e) => (totalDreams > 0 ? (e.dreamCount / totalDreams) * 100 : 0);
 
   // Build intensity over time from all dreams
   const intensityData = allDreams.slice().reverse().map((d, i) => ({
@@ -49,8 +61,41 @@ const AnalyticsPage = () => {
     intensity: d.emotions?.reduce((max, e) => Math.max(max, e.score), 0) * 100 || 0,
   }));
 
-  // Emotion pie
-  const pieData = emotionTrends.map(({ emotion, percentage }) => ({ name: emotion, value: percentage || 0 }));
+  // Build deduplicated cross-reference links from each dream's `relatedDreams`
+  // (populated by the embedding-similarity step in the AI service). Each pair
+  // is keyed by sorted IDs so A↔B and B↔A only show up once.
+  const relatedLinks = useMemo(() => {
+    if (!allDreams.length) return [];
+    const titleMap = new Map(
+      allDreams.map(d => [String(d._id), d.analysis?.title || 'Untitled'])
+    );
+    const seen = new Set();
+    const links = [];
+    for (const d of allDreams) {
+      const aId = String(d._id);
+      const aTitle = titleMap.get(aId) || 'Untitled';
+      for (const r of d.relatedDreams || []) {
+        const bId = r.dreamId ? String(r.dreamId) : null;
+        if (!bId || bId === aId) continue;
+        const pairKey = [aId, bId].sort().join(':');
+        if (seen.has(pairKey)) continue;
+        seen.add(pairKey);
+        links.push({
+          key: pairKey,
+          aId,
+          aTitle,
+          bId,
+          bTitle: titleMap.get(bId) || r.title || 'Untitled',
+          similarity: r.similarity || 0,
+        });
+      }
+    }
+    links.sort((a, b) => b.similarity - a.similarity);
+    return links;
+  }, [allDreams]);
+
+  // Emotion pie (kept in case a pie panel is reintroduced)
+  const pieData = emotionTrends.map(e => ({ name: e.label, value: emotionPct(e) }));
   const PIE_COLORS = ['#b8860b','#8b1a1a','#1a3a5c','#5c3a1a','#2a4a2a','#8a8070','#3d3528'];
 
   return (
@@ -119,7 +164,10 @@ const AnalyticsPage = () => {
           </div>
           <div style={{ height: '200px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={emotionTrends.map(e => ({ name: e.emotion.slice(0,4).toUpperCase(), pct: Math.round(e.percentage || 0) }))}>
+              <BarChart data={emotionTrends.map(e => ({
+                name: (e.label || '').slice(0, 4).toUpperCase() || 'N/A',
+                pct: Math.round(emotionPct(e)),
+              }))}>
                 <XAxis dataKey="name" tick={{ fontFamily: '"Share Tech Mono"', fontSize: 9, fill: 'var(--ink-faded)' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontFamily: '"Share Tech Mono"', fontSize: 9, fill: 'var(--ink-faded)' }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: 'var(--paper-dark)', border: '1px solid var(--ink-faded)', borderRadius: 0, fontFamily: '"Courier Prime"', fontSize: 12 }} />
@@ -173,12 +221,12 @@ const AnalyticsPage = () => {
             <div style={{ flex: 1, borderTop: '1px dashed rgba(61,53,40,0.3)' }} />
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
-            {symbolFreq.slice(0, 20).map(({ symbol, count }, i) => {
+            {symbolFreq.slice(0, 20).map(({ label, count }, i) => {
               const maxCount = symbolFreq[0]?.count || 1;
               const scale    = 0.8 + (count / maxCount) * 0.7;
               return (
                 <motion.div
-                  key={symbol}
+                  key={label}
                   initial={{ scale: 2, rotate: '-6deg', opacity: 0 }}
                   animate={{ scale, rotate: `${SYMBOL_ROTS[i % SYMBOL_ROTS.length]}deg`, opacity: 0.85 }}
                   transition={{ duration: 0.4, delay: 0.5 + i * 0.05, ease: [0.175, 0.885, 0.32, 1.275] }}
@@ -192,7 +240,7 @@ const AnalyticsPage = () => {
                   }}
                 >
                   <div style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.6rem', letterSpacing: '0.1em', color: 'var(--stamp-blue)', textTransform: 'uppercase' }}>
-                    {symbol}
+                    {label}
                   </div>
                   <div style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.5rem', color: 'var(--silver)' }}>
                     ×{count}
@@ -204,26 +252,48 @@ const AnalyticsPage = () => {
         </div>
       )}
 
-      {/* Pattern report */}
-      {patterns?.connections?.length > 0 && (
-        <div className="dossier-card" style={{ padding: '28px' }}>
+      {/* Cross-referenced case files — pairs of dreams that the embedding
+          similarity step linked at > 0.65 cosine similarity */}
+      {relatedLinks.length > 0 && (
+        <div className="dossier-card" style={{ padding: '28px', marginBottom: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-            <div className="case-label">RECURRING PATTERN REPORT</div>
+            <div className="case-label">CROSS-REFERENCED CASE FILES</div>
             <div style={{ flex: 1, borderTop: '1px dashed rgba(61,53,40,0.3)' }} />
+            <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--silver)', letterSpacing: '0.1em' }}>
+              {relatedLinks.length} LINK{relatedLinks.length === 1 ? '' : 'S'}
+            </span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1px', backgroundColor: 'rgba(61,53,40,0.2)' }}>
-            {patterns.connections.slice(0, 6).map((conn, i) => (
-              <div key={i} style={{ padding: '16px 20px', backgroundColor: 'var(--paper-dark)' }}>
-                <div style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--silver)', marginBottom: '6px', letterSpacing: '0.1em' }}>
-                  LINK-{String(i + 1).padStart(3,'0')}
+            {relatedLinks.slice(0, 6).map((link, i) => (
+              <Link
+                key={link.key}
+                to={`/dreams/${link.aId}`}
+                style={{
+                  padding: '16px 20px',
+                  backgroundColor: 'var(--paper-dark)',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  display: 'block',
+                  transition: 'opacity 0.2s',
+                  opacity: 0.9,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '0.9')}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--silver)', letterSpacing: '0.1em' }}>
+                    LINK-{String(i + 1).padStart(3, '0')}
+                  </span>
+                  <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--fixer)', letterSpacing: '0.08em' }}>
+                    {(link.similarity * 100).toFixed(0)}% MATCH
+                  </span>
                 </div>
-                <div style={{ fontFamily: '"Courier Prime", monospace', fontSize: '12px', color: 'var(--ink)', marginBottom: '4px' }}>
-                  {conn.dream1Title || 'Untitled'} ↔ {conn.dream2Title || 'Untitled'}
+                <div style={{ fontFamily: '"Courier Prime", monospace', fontSize: '12px', color: 'var(--ink)', lineHeight: 1.6 }}>
+                  <span style={{ color: 'var(--ink)' }}>{link.aTitle}</span>
+                  <span style={{ color: 'var(--silver)', margin: '0 6px' }}>↔</span>
+                  <span style={{ color: 'var(--ink)' }}>{link.bTitle}</span>
                 </div>
-                <div style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--fixer)' }}>
-                  MATCH: {conn.sharedSymbols?.join(', ') || 'unknown'}
-                </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
