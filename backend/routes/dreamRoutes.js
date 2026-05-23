@@ -5,7 +5,8 @@ const {
   getDreams,
   getDreamById,
   deleteDream,
-  getDreamStatus
+  getDreamStatus,
+  streamDreamEvents
 } = require('../controllers/dreamController');
 const { protect } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
@@ -18,7 +19,10 @@ router.post('/', upload.single('audio'), createDream);
 // GET /api/dreams - Query paginated lists of dreams
 router.get('/', getDreams);
 
-// GET /api/dreams/status/:id - Poll processing status for background tasks
+// GET /api/dreams/events/:id - SSE stream of processing stage transitions
+router.get('/events/:id', streamDreamEvents);
+
+// GET /api/dreams/status/:id - Poll processing status (legacy fallback)
 router.get('/status/:id', getDreamStatus);
 
 // GET /api/dreams/:id - Fetch dream details

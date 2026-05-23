@@ -82,27 +82,82 @@ const RecordPage = () => {
     return () => clearInterval(timerRef.current);
   }, [recording]);
 
-  /* ── Poll backend status ── */
+  /* ── Subscribe to live processing events via SSE ── */
   useEffect(() => {
     if (!dreamId) return;
-    const iv = setInterval(async () => {
-      try {
-        const res = await dreamsAPI.getDreamStatus(dreamId);
-        const status = res.processingStatus;
-        setPollStatus(status);
-        if (status === 'complete' || status === 'failed') {
-          clearInterval(iv);
-          if (status === 'complete') {
-            setTimeout(() => navigate(`/dreams/${dreamId}`), 600);
-          } else {
-            toast.error(res.processingError || 'Analysis failed. File corrupted.');
-            setProcessing(false);
-            setDreamId(null);
+
+    const token = localStorage.getItem('dream_token');
+    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api').replace(/\/$/, '');
+    const url = `${base}/dreams/events/${dreamId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+    let pollFallback = null;
+    let es;
+    try {
+      es = new EventSource(url);
+    } catch {
+      es = null;
+    }
+
+    const finalize = (status, errMsg) => {
+      if (status === 'complete') {
+        setTimeout(() => navigate(`/dreams/${dreamId}`), 600);
+      } else if (status === 'failed') {
+        toast.error(errMsg || 'Analysis failed. File corrupted.');
+        setProcessing(false);
+        setDreamId(null);
+      }
+    };
+
+    if (es) {
+      es.onmessage = (ev) => {
+        try {
+          const payload = JSON.parse(ev.data);
+          if (payload?.stage) setPollStatus(payload.stage);
+          if (payload?.processingStatus === 'complete' || payload?.processingStatus === 'failed') {
+            es.close();
+            finalize(payload.processingStatus, payload.processingError);
           }
+        } catch {
+          // ignore malformed events
         }
-      } catch {}
-    }, 2000);
-    return () => clearInterval(iv);
+      };
+      es.onerror = () => {
+        // SSE failed — fall back to polling the existing status endpoint
+        // so the page still progresses (e.g. behind a proxy that strips
+        // event-stream content-type).
+        es.close();
+        if (pollFallback) return;
+        pollFallback = setInterval(async () => {
+          try {
+            const res = await dreamsAPI.getDreamStatus(dreamId);
+            setPollStatus(res.processingStatus);
+            if (res.processingStatus === 'complete' || res.processingStatus === 'failed') {
+              clearInterval(pollFallback);
+              pollFallback = null;
+              finalize(res.processingStatus, res.processingError);
+            }
+          } catch {}
+        }, 2000);
+      };
+    } else {
+      // EventSource unavailable in this environment — just poll.
+      pollFallback = setInterval(async () => {
+        try {
+          const res = await dreamsAPI.getDreamStatus(dreamId);
+          setPollStatus(res.processingStatus);
+          if (res.processingStatus === 'complete' || res.processingStatus === 'failed') {
+            clearInterval(pollFallback);
+            pollFallback = null;
+            finalize(res.processingStatus, res.processingError);
+          }
+        } catch {}
+      }, 2000);
+    }
+
+    return () => {
+      if (es) es.close();
+      if (pollFallback) clearInterval(pollFallback);
+    };
   }, [dreamId]);
 
   /* ── Recording ── */

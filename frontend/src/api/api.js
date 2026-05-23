@@ -1,10 +1,37 @@
 import axios from 'axios';
+import {
+  CreateDreamResponse,
+  DreamStatusResponse,
+  PatternsResponse,
+} from '@shared/contracts';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
 });
+
+/**
+ * Parse a backend response against a shared Zod schema. On success we return
+ * the parsed (and defaulted) data. On failure we log a clear contract-drift
+ * warning and fall back to the raw response, so the UI still renders rather
+ * than blanking — future evolution can route these warnings to Sentry.
+ */
+function parseResponse(schema, data, label) {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    // Group warnings so devs immediately notice contract drift in the console.
+    /* eslint-disable no-console */
+    console.warn(
+      `[api] Contract drift on ${label}:`,
+      result.error.issues.map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`).join('; '),
+      { received: data }
+    );
+    /* eslint-enable no-console */
+    return data;
+  }
+  return result.data;
+}
 
 // Automatically inject JWT token from localStorage into headers of every request
 api.interceptors.request.use(
@@ -44,7 +71,7 @@ export const dreamsAPI = {
         'Content-Type': 'multipart/form-data',
       },
     });
-    return response.data;
+    return parseResponse(CreateDreamResponse, response.data, 'POST /dreams');
   },
   getDreams: async (params = {}) => {
     // params can contain: page, limit, emotion, symbol, search, sortBy
@@ -61,14 +88,14 @@ export const dreamsAPI = {
   },
   getDreamStatus: async (id) => {
     const response = await api.get(`/dreams/status/${id}`);
-    return response.data;
+    return parseResponse(DreamStatusResponse, response.data, 'GET /dreams/status/:id');
   }
 };
 
 export const analyticsAPI = {
   getPatterns: async () => {
     const response = await api.get('/analytics/patterns');
-    return response.data;
+    return parseResponse(PatternsResponse, response.data, 'GET /analytics/patterns');
   },
   getTimeline: async () => {
     const response = await api.get('/analytics/timeline');

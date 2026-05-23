@@ -9,22 +9,27 @@ const STEPS = [
   { key: 'archived',     label: 'ARCHIVED',     statusKey: 'completed'    },
 ];
 
-// Map backend status string → which step indices are done.
-// The backend only emits 'pending' | 'processing' | 'complete' | 'failed',
-// so we approximate progress: `processing` lights the first three stamps
-// and leaves the interpretation step actively pulsing.
+// Map a stage name (from the SSE stream) or a raw processingStatus value
+// (from the polling fallback) to which step indices are stamped done.
+//
+// SSE emits: started → transcribing → transcribed → analyzing → analyzed → archived
+// Polling sees: pending / processing / complete / failed
 const getCompletedSteps = (status) => {
   if (!status) return [];
   const s = status.toLowerCase();
-  if (s === 'complete' || s === 'completed') return [0, 1, 2, 3, 4];
-  if (s === 'processing')                    return [0, 1, 2];
-  if (s === 'pending' || s === 'failed')     return [];
-  // Legacy granular substage names — preserved in case the backend ever
-  // surfaces finer-grained progress in the future.
-  if (s === 'analyzing')          return [0, 1, 2];
-  if (s === 'extracting_symbols') return [0, 1];
-  if (s === 'extracting_emotions')return [0];
-  if (s === 'transcribing')       return [];
+
+  // Terminal — every stamp slams down
+  if (s === 'complete' || s === 'completed' || s === 'archived') {
+    return [0, 1, 2, 3, 4];
+  }
+  // Mid-pipeline, AI service has returned — last stamp pending
+  if (s === 'analyzed') return [0, 1, 2, 3];
+  // Mid-pipeline, AI service running — first stamp set, the rest pulse
+  if (s === 'analyzing' || s === 'transcribed') return [0];
+  // Pre-pipeline / failed / initial — nothing stamped
+  if (s === 'transcribing' || s === 'started' || s === 'processing' || s === 'pending' || s === 'failed') {
+    return [];
+  }
   return [];
 };
 
