@@ -8,7 +8,18 @@ const aiService = require('../services/aiService');
 const dreamEvents = require('../services/dreamEvents');
 const dreamQueue = require('../services/dreamQueue');
 const rootLogger = require('../services/logger').child({ scope: 'dreamController' });
-const { CreateDreamRequest } = require('../../shared/contracts');
+
+// shared/contracts.js is authored as native ESM (so the browser can
+// import it through Vite without a CJS shim). Node CJS can't `require()`
+// ESM synchronously, so we lazy-load it via dynamic import the first
+// time a handler needs a schema and cache the module on subsequent calls.
+let _contractsPromise = null;
+function loadContracts() {
+  if (!_contractsPromise) {
+    _contractsPromise = import('../../shared/contracts.js');
+  }
+  return _contractsPromise;
+}
 
 /**
  * Recomputes pattern statistics for a user.
@@ -213,6 +224,7 @@ const createDream = async (req, res, next) => {
     // Validate body against the shared Zod contract. Multer handles the
     // file shape separately; we only enforce that an audio submission
     // is accompanied by a file.
+    const { CreateDreamRequest } = await loadContracts();
     const parsed = CreateDreamRequest.safeParse(req.body);
     if (!parsed.success) {
       const message = parsed.error.issues[0]?.message || 'Invalid dream submission payload';
