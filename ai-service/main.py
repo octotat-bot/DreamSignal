@@ -7,6 +7,15 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# The huggingface_hub library only auto-detects HF_TOKEN / HUGGINGFACE_HUB_TOKEN,
+# not the HUGGINGFACE_API_KEY name we use elsewhere. Bridge them once, before
+# any HF-aware library imports, so model downloads get authenticated rate
+# limits and the "you are sending unauthenticated requests" warning shuts up.
+_hf_key = os.getenv("HUGGINGFACE_API_KEY")
+if _hf_key and not os.getenv("HF_TOKEN"):
+    os.environ["HF_TOKEN"] = _hf_key
+    os.environ.setdefault("HUGGINGFACE_HUB_TOKEN", _hf_key)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Preload models on startup
@@ -24,9 +33,13 @@ async def lifespan(app: FastAPI):
     embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
     app.state.whisper_service = WhisperService(model_size=whisper_model_size)
-    app.state.emotion_service = EmotionService()
-    app.state.symbol_service = SymbolService()
     app.state.embedding_service = EmbeddingService(model_name=embedding_model_name)
+    # Emotion + symbol classifiers now run locally — share the embedder so
+    # we don't load extra models just for label scoring. (HF Inference API
+    # was retired in 2024 and the new router requires paid-tier token perms.)
+    shared_embedder = app.state.embedding_service.model
+    app.state.emotion_service = EmotionService(embedder=shared_embedder)
+    app.state.symbol_service = SymbolService(embedder=shared_embedder)
     app.state.gemini_service = GeminiService()
 
     print("All ML models preloaded and active.")

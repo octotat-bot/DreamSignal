@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { reportError } from '../lib/sentry';
 
 /**
  * Route-level error boundary, styled to match the redacted-dossier theme.
@@ -25,6 +26,8 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     this.setState({ info });
     console.error('[ErrorBoundary]', error, info?.componentStack);
+    // Forward to Sentry if configured. No-ops without VITE_SENTRY_DSN.
+    reportError(error, { componentStack: info?.componentStack });
   }
 
   componentDidUpdate(prevProps) {

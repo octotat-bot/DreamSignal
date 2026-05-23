@@ -63,7 +63,14 @@ async function main() {
   const { apply, maxAgeDays } = parseArgs();
   const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
 
-  await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/dreamsignal');
+  // Match the backend's env-var name (MONGODB_URI). Fall back to the older
+  // MONGO_URI alias for backward compatibility with anyone running the
+  // script standalone with their own env.
+  const mongoUri =
+    process.env.MONGODB_URI ||
+    process.env.MONGO_URI ||
+    'mongodb://localhost:27017/dreamsignal';
+  await mongoose.connect(mongoUri);
 
   // Gather every relative path the DB still references.
   const dreams = await Dream.find({}).select('audioPath imagePath').lean();

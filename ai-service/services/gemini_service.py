@@ -20,45 +20,99 @@ class GeminiService:
         return os.getenv("IMAGEN_ENABLED", "false").strip().lower() in ("1", "true", "yes")
 
     def generate_image(self, prompt: str, output_path: str) -> bool:
-        """Generate a single dreamlike image from the cinematic description
-        and write it to `output_path`. Returns True on success, False if the
-        feature is disabled, the API errors out, or no image is returned.
+        """Generate a single dreamlike image and write to `output_path`.
+        Returns True on success, False if disabled, billing-blocked, or any
+        downstream error. Soft-fails so a missing image never breaks the
+        analyze pipeline — `imagePath` simply stays null on the Dream doc.
 
-        Soft-fails on every error so a missing image never breaks the
-        analyze pipeline — `imagePath` simply stays null on the Dream doc."""
+        Tries two routes in order so the call survives Google reshuffling
+        the model lineup:
+          1. `imagen-4.0-*-generate-*` via `models.generate_images` (predict)
+          2. `gemini-*-flash-image*` via `models.generate_content` with
+             `response_modalities=['IMAGE','TEXT']`
+        Override the priority list with IMAGE_GEN_MODELS (comma-separated)
+        in ai-service/.env.
+        """
         if not self.client or not self._imagen_enabled():
             return False
         if not prompt or not prompt.strip():
             return False
-        model = os.getenv("IMAGEN_MODEL", "imagen-3.0-generate-002")
+
         styled_prompt = (
             "A cinematic, dreamlike scene rendered as a painterly still from a film. "
             "Low saturation, atmospheric lighting, soft film grain, surreal composition. "
             f"Scene: {prompt.strip()}"
         )
-        try:
-            result = self.client.models.generate_images(
-                model=model,
-                prompt=styled_prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio="16:9",
-                ),
-            )
-            images = getattr(result, "generated_images", None) or []
-            if not images:
-                return False
-            image_obj = getattr(images[0], "image", None)
-            image_bytes = getattr(image_obj, "image_bytes", None) if image_obj else None
-            if not image_bytes:
-                return False
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            with open(output_path, "wb") as f:
-                f.write(image_bytes)
-            return True
-        except Exception as err:
-            print(f"Imagen generation failed ({model}): {err}")
-            return False
+
+        raw_models = os.getenv("IMAGE_GEN_MODELS", "").strip()
+        if raw_models:
+            models_to_try = [m.strip() for m in raw_models.split(",") if m.strip()]
+        else:
+            models_to_try = [
+                "imagen-4.0-fast-generate-001",
+                "imagen-4.0-generate-001",
+                "gemini-2.5-flash-image",
+                "gemini-3.1-flash-image-preview",
+            ]
+
+        for model in models_to_try:
+            try:
+                image_bytes = (
+                    self._predict_image(model, styled_prompt)
+                    if "imagen" in model
+                    else self._content_image(model, styled_prompt)
+                )
+                if not image_bytes:
+                    continue
+                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                with open(output_path, "wb") as f:
+                    f.write(image_bytes)
+                return True
+            except Exception as err:
+                msg = str(err)
+                if "RESOURCE_EXHAUSTED" in msg or "limit: 0" in msg or "only available on paid" in msg:
+                    # Billing-tier issue, no point trying more models with
+                    # the same key. Log once and bail.
+                    print(
+                        f"Image generation skipped: {model} requires a paid "
+                        f"Gemini tier (free tier quota is 0). Enable billing "
+                        f"on the Google Cloud project tied to GEMINI_API_KEY "
+                        f"or set IMAGEN_ENABLED=false to silence."
+                    )
+                    return False
+                print(f"Image generation failed for {model}: {msg[:200]}")
+                continue
+        return False
+
+    def _predict_image(self, model: str, prompt: str):
+        result = self.client.models.generate_images(
+            model=model,
+            prompt=prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="16:9",
+            ),
+        )
+        images = getattr(result, "generated_images", None) or []
+        if not images:
+            return None
+        image_obj = getattr(images[0], "image", None)
+        return getattr(image_obj, "image_bytes", None) if image_obj else None
+
+    def _content_image(self, model: str, prompt: str):
+        resp = self.client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
+        )
+        candidates = getattr(resp, "candidates", None) or []
+        if not candidates:
+            return None
+        for part in candidates[0].content.parts:
+            inline = getattr(part, "inline_data", None)
+            if inline and getattr(inline, "data", None):
+                return inline.data
+        return None
 
     def get_fallback_analysis(self, transcript: str) -> Dict[str, str]:
         return {

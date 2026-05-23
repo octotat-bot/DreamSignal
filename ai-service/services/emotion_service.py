@@ -1,14 +1,78 @@
 import os
-import requests
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
+
+import numpy as np
+
+
+# Same 7-emotion taxonomy as j-hartmann/emotion-english-distilroberta-base
+# so downstream consumers (Pattern aggregations, mood heatmap, dashboard)
+# don't have to change. Each label is paired with a descriptive prompt so
+# zero-shot embedding similarity has a richer anchor than the bare word.
+DEFAULT_EMOTION_PROMPTS: Dict[str, str] = {
+    "joy": "a feeling of joy, happiness, delight, or elation",
+    "sadness": "a feeling of sadness, grief, sorrow, or loss",
+    "fear": "a feeling of fear, dread, panic, or anxiety",
+    "anger": "a feeling of anger, rage, frustration, or hostility",
+    "surprise": "a feeling of surprise, astonishment, or shock",
+    "disgust": "a feeling of disgust, revulsion, or aversion",
+    "neutral": "a calm, neutral, ordinary emotional state",
+}
+
+
+def _to_unit(matrix: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms = np.where(norms == 0, 1.0, norms)
+    return matrix / norms
+
+
+def _softmax(x: np.ndarray, temperature: float = 1.0) -> np.ndarray:
+    z = (x - np.max(x)) / max(temperature, 1e-6)
+    e = np.exp(z)
+    return e / np.sum(e)
+
 
 class EmotionService:
-    def __init__(self, api_key: str = None, model_name: str = "j-hartmann/emotion-english-distilroberta-base"):
-        self.api_key = api_key or os.getenv("HUGGINGFACE_API_KEY")
-        self.model_name = model_name
-        self.api_url = f"https://api-inference.huggingface.co/models/{self.model_name}"
+    """Zero-shot emotion classification.
+
+    Was hitting `api-inference.huggingface.co/models/j-hartmann/emotion-english-
+    distilroberta-base` over HTTP, but HF retired that endpoint and migrated to
+    `router.huggingface.co/hf-inference/...` which needs a token with the
+    "Inference Providers" permission. Rather than chase that, we run zero-shot
+    locally using the sentence-transformer already loaded by EmbeddingService.
+
+    Cosine similarity between the transcript embedding and pre-embedded
+    emotion prompts is converted to a probability distribution via softmax.
+    Results: 7 labels with normalized scores summing to 1, a dominant label,
+    and an intensity (0..1) read off the top probability. Same shape as
+    before — no caller changes needed.
+    """
+
+    def __init__(
+        self,
+        embedder=None,
+        emotion_prompts: Optional[Dict[str, str]] = None,
+        temperature: float = 0.18,
+    ):
+        self.emotion_prompts = emotion_prompts or DEFAULT_EMOTION_PROMPTS
+        self.labels: List[str] = list(self.emotion_prompts.keys())
+        self.temperature = float(os.getenv("EMOTION_SOFTMAX_TEMP", temperature))
+        self.embedder = embedder
+        self._label_matrix: Optional[np.ndarray] = None
+        if embedder is not None:
+            try:
+                vectors = embedder.encode(
+                    [self.emotion_prompts[k] for k in self.labels],
+                    convert_to_numpy=True,
+                    show_progress_bar=False,
+                )
+                self._label_matrix = _to_unit(np.asarray(vectors, dtype=np.float32))
+            except Exception as err:
+                print(f"EmotionService: failed to embed emotion prompts ({err}); using fallback.")
+                self._label_matrix = None
 
     def get_fallback_emotions(self) -> Tuple[List[Dict[str, Any]], str, float]:
+        """Static distribution used when no embedder is available. Mirrors the
+        original placeholder so existing aggregates don't silently shift."""
         fallback = [
             {"label": "neutral", "score": 0.4},
             {"label": "joy", "score": 0.1},
@@ -16,59 +80,33 @@ class EmotionService:
             {"label": "fear", "score": 0.1},
             {"label": "anger", "score": 0.1},
             {"label": "surprise", "score": 0.1},
-            {"label": "disgust", "score": 0.1}
+            {"label": "disgust", "score": 0.1},
         ]
-        # Ensure it sums to 1.0
         total = sum(e["score"] for e in fallback)
         for e in fallback:
             e["score"] = round(e["score"] / total, 4)
-            
         return fallback, "neutral", 0.4
 
     def analyze_emotion(self, text: str) -> Tuple[List[Dict[str, Any]], str, float]:
-        if not self.api_key:
+        if self.embedder is None or self._label_matrix is None or not text or not text.strip():
             return self.get_fallback_emotions()
 
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        payload = {"inputs": text, "options": {"wait_for_model": True}}
-
         try:
-            response = requests.post(self.api_url, headers=headers, json=payload, timeout=10)
-            if response.status_code != 200:
-                # Log or print status code and response
-                print(f"HuggingFace Emotion API error status: {response.status_code}, response: {response.text}")
-                return self.get_fallback_emotions()
+            query = self.embedder.encode(text, convert_to_numpy=True, show_progress_bar=False)
+            query = np.asarray(query, dtype=np.float32).reshape(1, -1)
+            query = _to_unit(query)[0]
 
-            data = response.json()
-            # The API returns list of lists (e.g. [[{"label": "...", "score": ...}, ...]])
-            if isinstance(data, list) and len(data) > 0:
-                raw_emotions = data[0] if isinstance(data[0], list) else data
-                
-                # Check formatting
-                if not all(isinstance(x, dict) and "label" in x and "score" in x for x in raw_emotions):
-                    return self.get_fallback_emotions()
-                
-                # Normalize scores
-                total_score = sum(e["score"] for e in raw_emotions)
-                if total_score <= 0:
-                    return self.get_fallback_emotions()
+            sims = self._label_matrix @ query
+            probs = _softmax(sims, self.temperature)
 
-                emotions = []
-                for e in raw_emotions:
-                    emotions.append({
-                        "label": e["label"].lower(),
-                        "score": round(e["score"] / total_score, 4)
-                    })
-
-                # Sort by score desc
-                emotions.sort(key=lambda x: x["score"], reverse=True)
-                dominant_emotion = emotions[0]["label"]
-                emotional_intensity = emotions[0]["score"]
-                
-                return emotions, dominant_emotion, emotional_intensity
-            else:
-                return self.get_fallback_emotions()
-
+            emotions = [
+                {"label": self.labels[i], "score": round(float(probs[i]), 4)}
+                for i in range(len(self.labels))
+            ]
+            emotions.sort(key=lambda x: x["score"], reverse=True)
+            dominant = emotions[0]["label"]
+            intensity = float(emotions[0]["score"])
+            return emotions, dominant, intensity
         except Exception as err:
-            print(f"HuggingFace Emotion API request exception: {err}")
+            print(f"EmotionService.analyze_emotion failed: {err}")
             return self.get_fallback_emotions()

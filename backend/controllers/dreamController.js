@@ -554,5 +554,9 @@ module.exports = {
   getDreamStatus,
   streamDreamEvents,
   exportDreams,
-  recomputePatterns // Exported if needed by other routes
+  recomputePatterns,
+  // Required by dreamQueue's inline fallback. Without this export the
+  // pipeline silently fails with "processDream is not a function" whenever
+  // Redis isn't reachable. Covered by tests/createDream.test.js.
+  processDream,
 };

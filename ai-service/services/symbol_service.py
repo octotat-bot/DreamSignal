@@ -1,12 +1,14 @@
 import os
-import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-# Default candidate symbol set. ~45 archetypes spanning natural elements,
+import numpy as np
+
+
+# Default candidate symbol set. ~50 archetypes spanning natural elements,
 # spatial archetypes, social figures, transformations, and metaphysical
 # motifs — enough breadth to score most dreams without diluting the
-# zero-shot model's accuracy. Override at instantiation or via the
-# SYMBOL_LABELS env var (comma-separated) without touching code.
+# zero-shot signal. Override at instantiation or via the SYMBOL_LABELS
+# env var (comma-separated) without touching code.
 DEFAULT_CANDIDATE_LABELS = [
     # Elements & nature
     "water", "fire", "earth", "air", "light", "darkness", "storm",
@@ -37,59 +39,96 @@ def _parse_env_labels() -> List[str]:
     return [s.strip() for s in raw.split(",") if s.strip()]
 
 
+def _to_unit(matrix: np.ndarray) -> np.ndarray:
+    """L2-normalize each row so cosine similarity becomes a single dot product."""
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms = np.where(norms == 0, 1.0, norms)
+    return matrix / norms
+
+
 class SymbolService:
-    def __init__(self, api_key: str = None, model_name: str = "facebook/bart-large-mnli", candidate_labels=None):
-        self.api_key = api_key or os.getenv("HUGGINGFACE_API_KEY")
-        self.model_name = model_name
-        self.api_url = f"https://api-inference.huggingface.co/models/{self.model_name}"
-        # Precedence: explicit constructor arg > SYMBOL_LABELS env > defaults.
-        self.candidate_labels = candidate_labels or _parse_env_labels() or DEFAULT_CANDIDATE_LABELS
-        if not self.api_key:
+    """Zero-shot symbol classification.
+
+    Originally hit `api-inference.huggingface.co/models/facebook/bart-large-mnli`
+    via the HuggingFace Inference API. HF retired that endpoint in 2024 and
+    moved everything to `router.huggingface.co/hf-inference/...`, and the new
+    router requires a fine-grained token with the "Make calls to Inference
+    Providers" scope. That's two new failure modes (DNS + auth) for a feature
+    that doesn't need a separate model at all — the sentence-transformer the
+    embedding service already loads handles cosine similarity just fine.
+
+    So: we now do zero-shot locally. On init we embed each candidate label
+    once, then `extract_symbols` embeds the transcript and ranks labels by
+    cosine similarity. No network, no token, no rate limits, ~milliseconds
+    per call after warmup. If the embedder isn't available we soft-fail to
+    an empty list so the rest of the analyze pipeline keeps working.
+    """
+
+    def __init__(
+        self,
+        embedder=None,
+        candidate_labels: Optional[List[str]] = None,
+        threshold: float = 0.18,
+        top_k: int = 5,
+    ):
+        # Precedence: explicit arg > SYMBOL_LABELS env > defaults.
+        self.candidate_labels: List[str] = (
+            candidate_labels or _parse_env_labels() or DEFAULT_CANDIDATE_LABELS
+        )
+        self.threshold = float(os.getenv("SYMBOL_SCORE_THRESHOLD", threshold))
+        self.top_k = int(os.getenv("SYMBOL_TOP_K", top_k))
+
+        self.embedder = embedder
+        self._label_matrix: Optional[np.ndarray] = None
+        if embedder is not None:
+            try:
+                self._label_matrix = self._embed_labels(embedder, self.candidate_labels)
+            except Exception as err:
+                print(f"SymbolService: failed to embed candidate labels ({err}); disabling.")
+                self._label_matrix = None
+        else:
             print(
-                "SymbolService: HUGGINGFACE_API_KEY missing — zero-shot symbol "
-                "classification will be skipped. Set the key in ai-service/.env "
-                "to enable it."
+                "SymbolService: no embedder provided — symbol classification will "
+                "return [] until the sentence-transformer is wired in."
             )
 
+    @staticmethod
+    def _embed_labels(embedder, labels: List[str]) -> np.ndarray:
+        # Tiny semantic priming: "<label> as a dream symbol" pulls embeddings
+        # toward the symbolic interpretation rather than the literal noun
+        # cluster — measurably tighter recall on dream transcripts.
+        prompts = [f"{label} as a dream symbol" for label in labels]
+        vectors = embedder.encode(prompts, convert_to_numpy=True, show_progress_bar=False)
+        return _to_unit(np.asarray(vectors, dtype=np.float32))
+
     def extract_symbols(self, text: str) -> List[Dict[str, Any]]:
-        if not self.api_key or not text.strip():
+        if self._label_matrix is None or self.embedder is None:
+            return []
+        if not text or not text.strip():
             return []
 
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        payload = {
-            "inputs": text,
-            "parameters": {"candidate_labels": self.candidate_labels},
-            "options": {"wait_for_model": True},
-        }
-
         try:
-            response = requests.post(self.api_url, headers=headers, json=payload, timeout=20)
-            if response.status_code != 200:
-                print(
-                    f"HuggingFace Symbol API error status: {response.status_code}, "
-                    f"response: {response.text[:300]}"
-                )
-                return []
+            query = self.embedder.encode(text, convert_to_numpy=True, show_progress_bar=False)
+            query = np.asarray(query, dtype=np.float32).reshape(1, -1)
+            query = _to_unit(query)[0]
 
-            data = response.json()
-            if "labels" in data and "scores" in data:
-                labels = data["labels"]
-                scores = data["scores"]
+            # Cosine sim against the unit-normed label matrix.
+            scores = self._label_matrix @ query
+            order = np.argsort(-scores)
 
-                extracted = []
-                for label, score in zip(labels, scores):
-                    if score > 0.15:
-                        extracted.append({
-                            "label": label,
-                            "score": round(score, 4),
-                        })
+            extracted: List[Dict[str, Any]] = []
+            for idx in order:
+                score = float(scores[idx])
+                if score < self.threshold:
+                    break
+                extracted.append({
+                    "label": self.candidate_labels[int(idx)],
+                    "score": round(score, 4),
+                })
+                if len(extracted) >= self.top_k:
+                    break
 
-                # Sort and return top 5
-                extracted.sort(key=lambda x: x["score"], reverse=True)
-                return extracted[:5]
-            else:
-                return []
-
+            return extracted
         except Exception as err:
-            print(f"HuggingFace Symbol API request exception: {err}")
+            print(f"SymbolService.extract_symbols failed: {err}")
             return []

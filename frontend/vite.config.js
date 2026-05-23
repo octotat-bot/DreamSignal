@@ -74,4 +74,25 @@ export default defineConfig({
       allow: [path.resolve(__dirname, '..')],
     },
   },
+  build: {
+    // Bump the warning threshold since our biggest legitimate chunk (recharts
+    // + d3) is ~280 kB gzipped and that's expected. The 500 kB default fires
+    // on every CI run otherwise.
+    chunkSizeWarningLimit: 750,
+    rollupOptions: {
+      output: {
+        // Pull the heaviest vendor libs into their own chunks so they get
+        // long-term cached across deploys and route chunks stay small.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts';
+          if (id.includes('framer-motion')) return 'vendor-motion';
+          if (id.includes('react-router')) return 'vendor-router';
+          if (id.includes('react-dom') || id.match(/[\\/]react[\\/]/)) return 'vendor-react';
+          if (id.includes('zod')) return 'vendor-zod';
+          return undefined; // everything else goes to the default vendor bundle
+        },
+      },
+    },
+  },
 })

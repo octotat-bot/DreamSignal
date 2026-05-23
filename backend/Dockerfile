@@ -15,6 +15,8 @@ RUN cd backend && npm install --omit=dev --no-audit --no-fund
 COPY shared/ ./shared/
 
 COPY backend/ ./backend/
+# Maintenance scripts (run as separate compose services, e.g. cleanup cron).
+COPY scripts/ ./scripts/
 
 RUN mkdir -p storage/audio storage/temp storage/images
 

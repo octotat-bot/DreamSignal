@@ -33,8 +33,8 @@ const UserSchema = new mongoose.Schema({
   }
 });
 
-// Index declarations (handled by schema unique constraints, but explicitly named here for clarity)
-UserSchema.index({ email: 1 }, { unique: true });
-UserSchema.index({ username: 1 }, { unique: true });
+// NOTE: do not re-declare indexes here — `unique: true` on the schema
+// fields already creates them, and a second `.index({}, { unique: true })`
+// call triggers Mongoose's "Duplicate schema index" warning at startup.
 
 module.exports = mongoose.model('User', UserSchema);

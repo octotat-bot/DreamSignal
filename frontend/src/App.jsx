@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -8,13 +8,40 @@ import Navbar from './components/Navbar';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AnimatePresence, motion } from 'framer-motion';
 
-import LandingPage   from './pages/LandingPage';
-import AuthPages     from './pages/AuthPages';
-import Dashboard     from './pages/Dashboard';
-import RecordPage    from './pages/RecordPage';
-import DetailPage    from './pages/DetailPage';
-import TimelinePage  from './pages/TimelinePage';
-import AnalyticsPage from './pages/AnalyticsPage';
+// Route-level code splitting: each page is its own chunk so the initial
+// landing/login bundle stays tiny and heavy pages (Analytics + Recharts,
+// DetailPage + image grid, TimelinePage + heatmap) only ship when visited.
+const LandingPage   = lazy(() => import('./pages/LandingPage'));
+const AuthPages     = lazy(() => import('./pages/AuthPages'));
+const Dashboard     = lazy(() => import('./pages/Dashboard'));
+const RecordPage    = lazy(() => import('./pages/RecordPage'));
+const DetailPage    = lazy(() => import('./pages/DetailPage'));
+const TimelinePage  = lazy(() => import('./pages/TimelinePage'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+
+/* Themed loading placeholder shown while a route chunk is being fetched.
+   Matches the noir palette so the transition doesn't strobe white. */
+const RouteFallback = () => (
+  <div
+    role="status"
+    aria-live="polite"
+    style={{
+      minHeight: '60vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      letterSpacing: '0.3em',
+      fontFamily: 'var(--font-mono, monospace)',
+      fontSize: '0.8rem',
+      color: 'var(--silver)',
+      textTransform: 'uppercase',
+      opacity: 0.7,
+    }}
+  >
+    <span className="sr-only">Loading page…</span>
+    <span aria-hidden="true">[ Developing… ]</span>
+  </div>
+);
 
 const PUBLIC_PATHS = ['/', '/login', '/signup'];
 
@@ -76,28 +103,30 @@ const AppContent = () => {
       }}>
         <AnimatePresence mode="wait">
           <ErrorBoundary resetKey={location.pathname}>
-            <Routes location={location} key={location.pathname}>
-              <Route path="/"       element={<GuestRoute><PageWrapper><LandingPage /></PageWrapper></GuestRoute>} />
-              <Route path="/login"  element={<GuestRoute><PageWrapper><AuthPages  /></PageWrapper></GuestRoute>} />
-              <Route path="/signup" element={<GuestRoute><PageWrapper><AuthPages  /></PageWrapper></GuestRoute>} />
+            <Suspense fallback={<RouteFallback />}>
+              <Routes location={location} key={location.pathname}>
+                <Route path="/"       element={<GuestRoute><PageWrapper><LandingPage /></PageWrapper></GuestRoute>} />
+                <Route path="/login"  element={<GuestRoute><PageWrapper><AuthPages  /></PageWrapper></GuestRoute>} />
+                <Route path="/signup" element={<GuestRoute><PageWrapper><AuthPages  /></PageWrapper></GuestRoute>} />
 
-              <Route path="/dashboard" element={
-                <ProtectedRoute><PageWrapper><Dashboard /></PageWrapper></ProtectedRoute>
-              } />
-              <Route path="/record" element={
-                <ProtectedRoute><PageWrapper><RecordPage /></PageWrapper></ProtectedRoute>
-              } />
-              <Route path="/dreams/:id" element={
-                <ProtectedRoute><PageWrapper><DetailPage /></PageWrapper></ProtectedRoute>
-              } />
-              <Route path="/timeline" element={
-                <ProtectedRoute><PageWrapper><TimelinePage /></PageWrapper></ProtectedRoute>
-              } />
-              <Route path="/analytics" element={
-                <ProtectedRoute><PageWrapper><AnalyticsPage /></PageWrapper></ProtectedRoute>
-              } />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+                <Route path="/dashboard" element={
+                  <ProtectedRoute><PageWrapper><Dashboard /></PageWrapper></ProtectedRoute>
+                } />
+                <Route path="/record" element={
+                  <ProtectedRoute><PageWrapper><RecordPage /></PageWrapper></ProtectedRoute>
+                } />
+                <Route path="/dreams/:id" element={
+                  <ProtectedRoute><PageWrapper><DetailPage /></PageWrapper></ProtectedRoute>
+                } />
+                <Route path="/timeline" element={
+                  <ProtectedRoute><PageWrapper><TimelinePage /></PageWrapper></ProtectedRoute>
+                } />
+                <Route path="/analytics" element={
+                  <ProtectedRoute><PageWrapper><AnalyticsPage /></PageWrapper></ProtectedRoute>
+                } />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           </ErrorBoundary>
         </AnimatePresence>
       </main>
