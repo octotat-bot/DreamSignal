@@ -25,12 +25,18 @@ ENV/
 *.log
 logs/
 
-# Model cache (large files)
-models/
+# HuggingFace / Whisper model weight cache (large files) — note we
+# deliberately do NOT ignore the `models/` folder, which holds the
+# Pydantic request/response schemas. Targeting the binary weight
+# extensions and the explicit `.cache/` paths instead.
+.cache/
+hf_cache/
+whisper_cache/
 *.bin
 *.pt
 *.pth
 *.onnx
+*.safetensors
 
 # OS
 .DS_Store

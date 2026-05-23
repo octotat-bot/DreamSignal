@@ -4,6 +4,7 @@ import { dreamsAPI } from '../api/api';
 import { useToast } from '../context/ToastContext';
 import { motion } from 'framer-motion';
 import EmotionStamp from '../components/EmotionStamp';
+import MoodHeatmap from '../components/MoodHeatmap';
 
 const makeCaseId = (index) => {
   const suffixes = ['ALPHA','BETA','GAMMA','DELTA','EPSILON'];
@@ -127,12 +128,13 @@ const FilmFrame = ({ dream, index }) => {
 
 const TimelinePage = () => {
   const toast = useToast();
-  const [dreams,   setDreams]   = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [page,     setPage]     = useState(1);
-  const [total,    setTotal]    = useState(0);
-  const [search,   setSearch]   = useState('');
-  const [emotion,  setEmotion]  = useState('');
+  const [dreams,        setDreams]        = useState([]);
+  const [heatmapDreams, setHeatmapDreams] = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [page,          setPage]          = useState(1);
+  const [total,         setTotal]         = useState(0);
+  const [search,        setSearch]        = useState('');
+  const [emotion,       setEmotion]       = useState('');
 
   const LIMIT = 9;
 
@@ -147,6 +149,22 @@ const TimelinePage = () => {
   }, [page, emotion]);
 
   useEffect(() => { loadDreams(); }, [loadDreams]);
+
+  // Separate, unfiltered fetch for the heatmap — we want the calendar to
+  // reflect the user's entire ~6 month history regardless of which filter
+  // is active on the contact sheet below.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await dreamsAPI.getDreams({ page: 1, limit: 365 });
+        if (!cancelled) setHeatmapDreams(res.dreams || []);
+      } catch {
+        // non-fatal — heatmap just stays empty
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = search
     ? dreams.filter(d =>
@@ -167,6 +185,9 @@ const TimelinePage = () => {
           Dream Exposure Archive
         </h1>
       </div>
+
+      {/* Mood calendar heatmap — last 6 months of dream activity */}
+      <MoodHeatmap dreams={heatmapDreams} />
 
       {/* Filter bar — darkroom equipment panel style */}
       <div style={{

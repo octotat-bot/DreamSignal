@@ -13,6 +13,53 @@ class GeminiService:
         else:
             self.client = None
 
+    def _imagen_enabled(self) -> bool:
+        """Image generation is opt-in via env so we don't burn API quota by
+        default. Set IMAGEN_ENABLED=true once you've confirmed your Gemini
+        / Imagen access tier supports image output."""
+        return os.getenv("IMAGEN_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+
+    def generate_image(self, prompt: str, output_path: str) -> bool:
+        """Generate a single dreamlike image from the cinematic description
+        and write it to `output_path`. Returns True on success, False if the
+        feature is disabled, the API errors out, or no image is returned.
+
+        Soft-fails on every error so a missing image never breaks the
+        analyze pipeline — `imagePath` simply stays null on the Dream doc."""
+        if not self.client or not self._imagen_enabled():
+            return False
+        if not prompt or not prompt.strip():
+            return False
+        model = os.getenv("IMAGEN_MODEL", "imagen-3.0-generate-002")
+        styled_prompt = (
+            "A cinematic, dreamlike scene rendered as a painterly still from a film. "
+            "Low saturation, atmospheric lighting, soft film grain, surreal composition. "
+            f"Scene: {prompt.strip()}"
+        )
+        try:
+            result = self.client.models.generate_images(
+                model=model,
+                prompt=styled_prompt,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio="16:9",
+                ),
+            )
+            images = getattr(result, "generated_images", None) or []
+            if not images:
+                return False
+            image_obj = getattr(images[0], "image", None)
+            image_bytes = getattr(image_obj, "image_bytes", None) if image_obj else None
+            if not image_bytes:
+                return False
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            with open(output_path, "wb") as f:
+                f.write(image_bytes)
+            return True
+        except Exception as err:
+            print(f"Imagen generation failed ({model}): {err}")
+            return False
+
     def get_fallback_analysis(self, transcript: str) -> Dict[str, str]:
         return {
             "title": "Untitled Dream",
