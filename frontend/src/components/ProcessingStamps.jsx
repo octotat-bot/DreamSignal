@@ -2,11 +2,11 @@ import React from 'react';
 import { motion } from 'framer-motion';
 
 const STEPS = [
-  { key: 'transcribed',  label: 'TRANSCRIBED',  statusKey: 'transcribed'  },
-  { key: 'classified',   label: 'CLASSIFIED',   statusKey: 'emotions'     },
-  { key: 'decoded',      label: 'DECODED',      statusKey: 'symbols'      },
-  { key: 'interpreted',  label: 'INTERPRETED',  statusKey: 'analyzed'     },
-  { key: 'archived',     label: 'ARCHIVED',     statusKey: 'completed'    },
+  { key: 'transcribed',  label: 'TRANSCRIBED'  },
+  { key: 'classified',   label: 'CLASSIFIED'   },
+  { key: 'decoded',      label: 'DECODED'      },
+  { key: 'interpreted',  label: 'INTERPRETED'  },
+  { key: 'archived',     label: 'ARCHIVED'     },
 ];
 
 // Map a stage name (from the SSE stream) or a raw processingStatus value

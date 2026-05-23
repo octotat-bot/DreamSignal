@@ -253,80 +253,9 @@ Logs are structured JSON (pino) in production and pretty-printed in dev. Every H
 
 ---
 
-## Production Deployment (VPS)
+## Deploy (Render + Vercel)
 
-DreamSignal ships a production Docker stack with automatic HTTPS (Caddy) and a static nginx frontend that proxies `/api` to the backend on the same domain.
-
-### What you need
-
-| Resource | Recommendation |
-|---|---|
-| **VPS** | 4 GB RAM minimum (AI loads Whisper + sentence-transformer). DigitalOcean, Hetzner, AWS Lightsail, etc. |
-| **Domain** | A record → your server IP |
-| **MongoDB Atlas** | Free tier works; whitelist your server's IP under Network Access |
-| **API keys** | `GEMINI_API_KEY` (required), `JWT_SECRET` (32+ random chars) |
-
-### Steps
-
-```bash
-# 1. On your VPS — install Docker
-curl -fsSL https://get.docker.com | sh
-
-# 2. Clone the repo
-git clone https://github.com/octotat-bot/DreamSignal.git
-cd DreamSignal
-
-# 3. Configure production env
-cp deploy/.env.production.example .env.production
-nano .env.production   # set DOMAIN, MONGODB_URI, GEMINI_API_KEY, JWT_SECRET
-
-# 4. Deploy (builds images, starts stack, obtains TLS cert)
-bash scripts/deploy-prod.sh
-```
-
-Open `https://YOUR_DOMAIN`. Health check: `https://YOUR_DOMAIN/api/health`.
-
-### Architecture (production)
-
-```
-Browser → Caddy (:443 TLS) → frontend nginx (:80)
-                                  ├─ /        → React static files
-                                  ├─ /api/*   → backend:5001
-                                  └─ /storage → backend:5001
-backend → ai-service:8001 (internal, not public)
-backend → MongoDB Atlas (external)
-backend → redis (queue, internal)
-```
-
-### Useful commands
-
-```bash
-# Tail logs
-docker compose --env-file .env.production -f docker-compose.prod.yml logs -f
-
-# Restart after env change
-docker compose --env-file .env.production -f docker-compose.prod.yml up --build -d
-
-# Stop everything
-docker compose --env-file .env.production -f docker-compose.prod.yml down
-```
-
-### Alternative: split hosting
-
-If you don't want to run the AI service yourself (it's RAM-heavy), you can deploy:
-
-- **Frontend** → Vercel/Netlify (`VITE_API_BASE_URL=https://api.yourdomain.com/api`)
-- **Backend** → Railway/Render/Fly
-- **AI service** → same host as backend (needs 2–4 GB RAM plan)
-- **Database** → MongoDB Atlas
-
-Set `FRONTEND_URL` on the backend to your frontend origin for CORS.
-
----
-
-## Deploy without a VPS (Render + Vercel)
-
-If you don't have a server, split the app across free/cheap managed platforms. You already use **MongoDB Atlas** — keep that.
+Host the app on managed platforms (no server required). You already use **MongoDB Atlas** — keep that.
 
 | Part | Platform | Cost |
 |---|---|---|
@@ -387,4 +316,4 @@ Should show `"ai": { "status": "ok", "whisper_loaded": true }`.
 | `502` on API | AI service still booting — wait 5 min, check `/api/health` |
 | Login works locally but not deployed | Atlas Network Access must allow Render IPs (`0.0.0.0/0` for testing) |
 
-See `deploy/no-vps.env.example` for a checklist of every env var.
+See `deploy/env.example` for a checklist of every env var.

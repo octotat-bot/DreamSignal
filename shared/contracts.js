@@ -162,21 +162,3 @@ export const PatternsResponse = z.object({
   totalDreams: z.number().default(0),
   lastUpdated: z.coerce.date().optional(),
 });
-
-/* ─────────────────────────────────────────────────────────────────────
- * Helper: safeParse with a friendly thrown error
- * ────────────────────────────────────────────────────────────────────*/
-
-export function parseOrThrow(schema, value, label) {
-  const result = schema.safeParse(value);
-  if (!result.success) {
-    const issues = result.error.issues
-      .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
-      .join('; ');
-    const err = new Error(`Contract violation in ${label}: ${issues}`);
-    err.code = 'CONTRACT_VIOLATION';
-    err.issues = result.error.issues;
-    throw err;
-  }
-  return result.data;
-}
