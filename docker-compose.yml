@@ -1,0 +1,91 @@
+# DreamSignal — one-command local dev stack.
+#
+#   docker compose up --build
+#
+# Required env vars (put in a `.env` next to this file, see .env.example):
+#   GEMINI_API_KEY        — get from https://aistudio.google.com/apikey
+#   JWT_SECRET            — any 32+ char random string
+# Optional:
+#   HUGGINGFACE_API_KEY   — silences "unauthenticated requests" warning
+#                           and raises symbol-classifier rate limits
+#   IMAGEN_ENABLED        — set to true to generate dream-scene images
+#   WHISPER_MODEL         — tiny | base (default) | small | medium
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: dreamsignal-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
+    container_name: dreamsignal-ai
+    restart: unless-stopped
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-}
+      IMAGEN_ENABLED: ${IMAGEN_ENABLED:-false}
+      IMAGEN_MODEL: ${IMAGEN_MODEL:-imagen-3.0-generate-002}
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      STORAGE_ROOT: /app/storage
+      PORT: "8001"
+    volumes:
+      # Shared storage so generated images and uploaded audio are reachable
+      # by the backend's express.static('/storage') mount.
+      - ./storage:/app/storage
+      # Cache HF / Whisper model downloads between container restarts.
+      - hf_cache:/root/.cache/huggingface
+      - whisper_cache:/root/.cache/whisper
+    ports:
+      - "8001:8001"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: dreamsignal-backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+    environment:
+      PORT: "5001"
+      MONGO_URI: mongodb://mongo:27017/dreamsignal
+      JWT_SECRET: ${JWT_SECRET:-please_set_a_real_secret_in_dot_env}
+      AI_SERVICE_URL: http://ai-service:8001
+      FRONTEND_URL: http://localhost:5173
+    volumes:
+      - ./storage:/app/storage
+    ports:
+      - "5001:5001"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: dreamsignal-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: http://localhost:5001/api
+    ports:
+      - "5173:5173"
+
+volumes:
+  mongo_data:
+  hf_cache:
+  whisper_cache:

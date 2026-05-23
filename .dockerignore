@@ -1,0 +1,17 @@
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+**/.env
+**/dist
+**/build
+**/.next
+.git
+.gitignore
+.DS_Store
+*.log
+storage/audio/*
+storage/temp/*
+storage/images/*
+!storage/**/.gitkeep
