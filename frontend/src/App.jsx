@@ -61,9 +61,12 @@ const AppContent = () => {
       flexDirection: 'column',
       position: 'relative',
     }}>
+      {/* Keyboard-only skip-to-main link — visible when focused, hidden otherwise. */}
+      <a href="#main-content" className="skip-link">Skip to main content</a>
+
       {isAuthenticated && !loading && <Navbar />}
 
-      <main style={{
+      <main id="main-content" tabIndex={-1} style={{
         flex: 1,
         width: '100%',
         display: 'flex',

@@ -18,8 +18,12 @@
   --stamp-blue:   #1a3a5c;
   --safelight:    #6b1a0a;
   --fixer:        #b8860b;
-  --silver:       #8a8070;
+  /* Bumped from #8a8070 toward darker silver (#6e6452) so case-label
+     metadata text clears WCAG AA on the cream paper background. The
+     old shade hit ~3.1:1; new one is ~4.6:1. */
+  --silver:       #6e6452;
   --film-clear:   #f8f4ea;
+  --focus-ring:   #b8860b;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -44,6 +48,62 @@ body {
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='0.06'/%3E%3C/svg%3E");
   background-repeat: repeat;
+}
+
+/* ═══════════════════════════════════════════════════
+   ACCESSIBILITY — focus rings, skip-link, reduced motion
+   ═══════════════════════════════════════════════════ */
+/* Global focus-visible ring. We only paint it on keyboard focus
+   (:focus-visible) so mouse clicks don't show the outline. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(184, 134, 11, 0.25);
+  border-radius: 2px;
+}
+
+/* Skip-to-main-content link — visually hidden until focused. Anchor
+   target is <main id="main-content"> rendered by App.jsx. */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 8px;
+  z-index: 9999;
+  background-color: var(--ink);
+  color: var(--paper);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 10px 18px;
+  text-decoration: none;
+  border: 2px solid var(--fixer);
+  transition: top 0.15s ease-out;
+}
+.skip-link:focus { top: 8px; }
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visually hidden but available to screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ═══════════════════════════════════════════════════
