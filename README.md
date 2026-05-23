@@ -250,3 +250,141 @@ node scripts/cleanup_storage.js --apply --max-age=14
 The `cleanup` service in `docker-compose.yml` runs the script every `CLEANUP_INTERVAL_HOURS` (default 24h). Set `CLEANUP_DRY_RUN=true` in the compose env to log without deleting.
 
 Logs are structured JSON (pino) in production and pretty-printed in dev. Every HTTP request is given an `x-request-id` header that is forwarded to the AI service, so you can grep a single dream end-to-end across both services.
+
+---
+
+## Production Deployment (VPS)
+
+DreamSignal ships a production Docker stack with automatic HTTPS (Caddy) and a static nginx frontend that proxies `/api` to the backend on the same domain.
+
+### What you need
+
+| Resource | Recommendation |
+|---|---|
+| **VPS** | 4 GB RAM minimum (AI loads Whisper + sentence-transformer). DigitalOcean, Hetzner, AWS Lightsail, etc. |
+| **Domain** | A record → your server IP |
+| **MongoDB Atlas** | Free tier works; whitelist your server's IP under Network Access |
+| **API keys** | `GEMINI_API_KEY` (required), `JWT_SECRET` (32+ random chars) |
+
+### Steps
+
+```bash
+# 1. On your VPS — install Docker
+curl -fsSL https://get.docker.com | sh
+
+# 2. Clone the repo
+git clone https://github.com/octotat-bot/DreamSignal.git
+cd DreamSignal
+
+# 3. Configure production env
+cp deploy/.env.production.example .env.production
+nano .env.production   # set DOMAIN, MONGODB_URI, GEMINI_API_KEY, JWT_SECRET
+
+# 4. Deploy (builds images, starts stack, obtains TLS cert)
+bash scripts/deploy-prod.sh
+```
+
+Open `https://YOUR_DOMAIN`. Health check: `https://YOUR_DOMAIN/api/health`.
+
+### Architecture (production)
+
+```
+Browser → Caddy (:443 TLS) → frontend nginx (:80)
+                                  ├─ /        → React static files
+                                  ├─ /api/*   → backend:5001
+                                  └─ /storage → backend:5001
+backend → ai-service:8001 (internal, not public)
+backend → MongoDB Atlas (external)
+backend → redis (queue, internal)
+```
+
+### Useful commands
+
+```bash
+# Tail logs
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f
+
+# Restart after env change
+docker compose --env-file .env.production -f docker-compose.prod.yml up --build -d
+
+# Stop everything
+docker compose --env-file .env.production -f docker-compose.prod.yml down
+```
+
+### Alternative: split hosting
+
+If you don't want to run the AI service yourself (it's RAM-heavy), you can deploy:
+
+- **Frontend** → Vercel/Netlify (`VITE_API_BASE_URL=https://api.yourdomain.com/api`)
+- **Backend** → Railway/Render/Fly
+- **AI service** → same host as backend (needs 2–4 GB RAM plan)
+- **Database** → MongoDB Atlas
+
+Set `FRONTEND_URL` on the backend to your frontend origin for CORS.
+
+---
+
+## Deploy without a VPS (Render + Vercel)
+
+If you don't have a server, split the app across free/cheap managed platforms. You already use **MongoDB Atlas** — keep that.
+
+| Part | Platform | Cost |
+|---|---|---|
+| Frontend | **Vercel** | Free |
+| Backend API | **Render** | Free (cold starts after 15 min idle) |
+| AI service | **Render** | **~$7/mo Starter** (Whisper needs RAM; free tier is too small) |
+| Database | **MongoDB Atlas** | Free M0 tier |
+
+> **Note:** Render's disk is ephemeral — uploaded voice recordings may not survive a redeploy. Dream transcripts and analysis in MongoDB are safe.
+
+### Step 1 — MongoDB Atlas
+
+1. [cloud.mongodb.com](https://cloud.mongodb.com) → create a free cluster.
+2. **Database Access** → add a user + password.
+3. **Network Access** → allow `0.0.0.0/0` (or Render IP ranges).
+4. Copy the connection string → you'll paste it as `MONGODB_URI`.
+
+### Step 2 — Backend + AI on Render
+
+1. Push the repo to GitHub (already done if you pulled latest).
+2. Go to [dashboard.render.com/blueprints](https://dashboard.render.com/blueprints) → **New Blueprint Instance**.
+3. Connect your `DreamSignal` repo — Render reads `render.yaml` automatically.
+4. When prompted, set:
+   - `MONGODB_URI` — your Atlas connection string
+   - `GEMINI_API_KEY` — from [Google AI Studio](https://aistudio.google.com/apikey)
+5. Click **Apply**. Wait ~10–15 min (AI service downloads ML models on first boot).
+6. Copy your API URL, e.g. `https://dreamsignal-api.onrender.com`.
+7. In Render → **dreamsignal-api** → Environment → set:
+   - `FRONTEND_URL` = `https://YOUR-APP.vercel.app` (fill after Step 3)
+
+Health check: `https://dreamsignal-api.onrender.com/api/health`  
+Should show `"ai": { "status": "ok", "whisper_loaded": true }`.
+
+### Step 3 — Frontend on Vercel
+
+1. Go to [vercel.com/new](https://vercel.com/new) → import your GitHub repo.
+2. Set **Root Directory** → `frontend`.
+3. Add environment variable:
+   ```
+   VITE_API_BASE_URL = https://dreamsignal-api.onrender.com/api
+   ```
+   (use your actual Render API URL from Step 2.)
+4. Deploy. Copy your Vercel URL, e.g. `https://dreamsignal.vercel.app`.
+5. Go back to Render → **dreamsignal-api** → set `FRONTEND_URL` to that Vercel URL → **Manual Deploy**.
+
+### Step 4 — Test
+
+1. Open your Vercel URL → sign up / log in.
+2. File a **written** dream first (fastest test).
+3. Try **voice** recording — first AI request after idle may take 30–60s (cold start).
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Voice fails / health shows AI offline | Upgrade AI service to **Starter** plan; check Render logs for OOM |
+| CORS error in browser | Set `FRONTEND_URL` on the API to match your exact Vercel URL (no trailing slash) |
+| `502` on API | AI service still booting — wait 5 min, check `/api/health` |
+| Login works locally but not deployed | Atlas Network Access must allow Render IPs (`0.0.0.0/0` for testing) |
+
+See `deploy/no-vps.env.example` for a checklist of every env var.

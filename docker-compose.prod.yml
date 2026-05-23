@@ -1,0 +1,109 @@
+# DreamSignal — production stack (VPS / cloud VM).
+#
+# Prerequisites:
+#   1. Copy deploy/.env.production.example → .env.production and fill values
+#   2. Point your domain's A record at this server's IP
+#   3. Run:  bash scripts/deploy-prod.sh
+#
+# Uses MongoDB Atlas (external) by default — no local mongo container.
+# AI service needs ~2 GB RAM minimum (WHISPER_MODEL=base).
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-}
+      WHISPER_MODEL_SIZE: ${WHISPER_MODEL:-base}
+      PORT: "8001"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+      - whisper_cache:/root/.cache/whisper
+    # Not exposed publicly — only backend talks to it on the internal network.
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: "5001"
+      MONGODB_URI: ${MONGODB_URI}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      AI_SERVICE_URL: http://ai-service:8001
+      FRONTEND_URL: https://${DOMAIN}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    volumes:
+      - storage_data:/app/storage
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  cleanup:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      MONGODB_URI: ${MONGODB_URI}
+      CLEANUP_INTERVAL_HOURS: ${CLEANUP_INTERVAL_HOURS:-24}
+      CLEANUP_MAX_AGE_DAYS: ${CLEANUP_MAX_AGE_DAYS:-7}
+      CLEANUP_DRY_RUN: ${CLEANUP_DRY_RUN:-false}
+    volumes:
+      - storage_data:/app/storage
+    working_dir: /app
+    command: ["node", "scripts/cleanup_cron.js"]
+
+volumes:
+  redis_data:
+  hf_cache:
+  whisper_cache:
+  storage_data:
+  caddy_data:
+  caddy_config:

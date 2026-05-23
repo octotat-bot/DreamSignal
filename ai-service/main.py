@@ -29,7 +29,8 @@ async def lifespan(app: FastAPI):
     from services.gemini_service import GeminiService
 
     # Instantiate services and attach to app state
-    whisper_model_size = os.getenv("WHISPER_MODEL_SIZE", "base")
+    # Compose/docker use WHISPER_MODEL; local .env uses WHISPER_MODEL_SIZE.
+    whisper_model_size = os.getenv("WHISPER_MODEL_SIZE") or os.getenv("WHISPER_MODEL", "base")
     embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
     app.state.whisper_service = WhisperService(model_size=whisper_model_size)

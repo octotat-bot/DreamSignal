@@ -51,7 +51,7 @@ services:
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-}
-      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_MODEL_SIZE: ${WHISPER_MODEL:-base}
       PORT: "8001"
     volumes:
       # Cache HF / Whisper model downloads between container restarts.

@@ -11,7 +11,9 @@ const { createApp } = require('./app');
 
 connectDB();
 
-const app = createApp();
+const app = createApp({
+  corsOrigin: process.env.FRONTEND_URL || 'http://localhost:5173',
+});
 
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
