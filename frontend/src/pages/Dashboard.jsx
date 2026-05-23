@@ -15,23 +15,79 @@ const makeCaseId = (index) => {
 const formatDate = d => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const formatDateShort = d => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
+// Local-date key (YYYY-MM-DD) — used by the streak counter so a dream
+// filed at 23:55 doesn't count as a separate "day" from one filed at
+// 00:05 the next morning relative to the user's wall clock.
+const dayKey = (d) => {
+  const dt = new Date(d);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Compute current + longest consecutive-day streaks from a list of
+// createdAt timestamps. Current streak ends on whichever is later: today
+// (if the user has filed today) or yesterday (so a streak doesn't reset
+// until the day actually rolls over without an entry).
+const computeStreaks = (dates) => {
+  if (!dates || dates.length === 0) return { current: 0, longest: 0 };
+  const days = Array.from(new Set(dates.map(dayKey))).sort(); // ascending
+
+  // Longest run of consecutive dates
+  let longest = 1;
+  let run = 1;
+  for (let i = 1; i < days.length; i++) {
+    const prev = new Date(days[i - 1]);
+    const curr = new Date(days[i]);
+    const diff = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
+    if (diff === 1) {
+      run += 1;
+      longest = Math.max(longest, run);
+    } else {
+      run = 1;
+    }
+  }
+
+  // Current streak ends today or yesterday
+  const today = dayKey(new Date());
+  const yesterday = dayKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  const last = days[days.length - 1];
+  if (last !== today && last !== yesterday) return { current: 0, longest };
+
+  let current = 1;
+  for (let i = days.length - 2; i >= 0; i--) {
+    const prev = new Date(days[i]);
+    const next = new Date(days[i + 1]);
+    const diff = Math.round((next - prev) / (1000 * 60 * 60 * 24));
+    if (diff === 1) current += 1;
+    else break;
+  }
+  return { current, longest };
+};
+
 const Dashboard = () => {
   const { user, refreshProfile } = useAuth();
   const toast = useToast();
-  const [recentDreams, setRecentDreams] = useState([]);
-  const [patterns,     setPatterns]     = useState(null);
-  const [loading,      setLoading]      = useState(true);
+  const [recentDreams,  setRecentDreams]  = useState([]);
+  const [streakDreams,  setStreakDreams]  = useState([]);
+  const [patterns,      setPatterns]      = useState(null);
+  const [loading,       setLoading]       = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
         await refreshProfile();
-        const [dreamsData, patternsData] = await Promise.all([
+        // Recent list (4) for the sidebar, full history (up to 365) for
+        // the streak counter. Parallel + only one round-trip cost.
+        const [dreamsData, streakData, patternsData] = await Promise.all([
           dreamsAPI.getDreams({ page: 1, limit: 4 }),
+          dreamsAPI.getDreams({ page: 1, limit: 365 }),
           analyticsAPI.getPatterns(),
         ]);
         setRecentDreams(dreamsData.dreams);
+        setStreakDreams(streakData.dreams || []);
         setPatterns(patternsData);
       } catch {
         toast.error('Failed to load case files.');
@@ -41,6 +97,8 @@ const Dashboard = () => {
     };
     load();
   }, []);
+
+  const streak = computeStreaks(streakDreams.map((d) => d.createdAt));
 
   const totalDreams   = patterns?.totalDreams      || 0;
   const emotionTrends = patterns?.emotionTrends    || [];
@@ -100,6 +158,28 @@ const Dashboard = () => {
           <div style={{ textAlign: 'right' }}>
             <div className="case-label">{totalDreams} CASES FILED</div>
             <div className="case-label">LAST ACTIVITY: {lastDate}</div>
+            {totalDreams > 0 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await dreamsAPI.exportArchive();
+                    toast.success('Archive exported.');
+                  } catch {
+                    toast.error('Export failed.');
+                  }
+                }}
+                className="btn-stamp"
+                style={{
+                  marginTop: '6px',
+                  fontSize: '0.55rem',
+                  color: 'var(--stamp-blue)',
+                  letterSpacing: '0.14em',
+                }}
+              >
+                ▼ EXPORT ARCHIVE (.JSON)
+              </button>
+            )}
           </div>
           {/* FILE ACTIVE stamp */}
           <motion.div
@@ -139,6 +219,13 @@ const Dashboard = () => {
           { label: 'CASES FILED',       value: totalDreams,               sub: 'total archived'   },
           { label: 'DOMINANT SIGNAL',   value: dominantEmo.toUpperCase(), sub: 'emotional index'  },
           { label: 'RECURRING SYMBOLS', value: symbolFreq.length,         sub: 'detected patterns'},
+          {
+            label: 'CURRENT STREAK',
+            value: streak.current > 0 ? `${streak.current}D` : '—',
+            sub: streak.longest > streak.current
+              ? `best ${streak.longest} day${streak.longest === 1 ? '' : 's'}`
+              : 'consecutive days',
+          },
           { label: 'LAST EXPOSURE',     value: lastDate,                  sub: 'most recent entry'},
         ].map(({ label, value, sub }, i) => (
           <div key={label} className="dossier-card" style={{ padding: '20px 24px' }}>

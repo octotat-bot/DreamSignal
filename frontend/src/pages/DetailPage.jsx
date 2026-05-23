@@ -158,6 +158,62 @@ const DetailPage = () => {
               }}>
                 EXPOSURE DATE: {formatDate(dream.createdAt)} / {dream.inputType?.toUpperCase()} RECORDING
               </div>
+
+              {/* Subjective attribute badges + tags */}
+              {(dream.isLucid || dream.isRecurring || dream.isNightmare || (dream.tags && dream.tags.length > 0)) && (
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginTop: '12px',
+                  alignItems: 'center',
+                }}>
+                  {dream.isLucid && (
+                    <span style={{
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: '0.55rem',
+                      letterSpacing: '0.12em',
+                      padding: '3px 8px',
+                      border: '1.5px solid var(--fixer)',
+                      color: 'var(--fixer)',
+                      textTransform: 'uppercase',
+                    }}>◉ LUCID</span>
+                  )}
+                  {dream.isRecurring && (
+                    <span style={{
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: '0.55rem',
+                      letterSpacing: '0.12em',
+                      padding: '3px 8px',
+                      border: '1.5px solid var(--stamp-blue)',
+                      color: 'var(--stamp-blue)',
+                      textTransform: 'uppercase',
+                    }}>↻ RECURRING</span>
+                  )}
+                  {dream.isNightmare && (
+                    <span style={{
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: '0.55rem',
+                      letterSpacing: '0.12em',
+                      padding: '3px 8px',
+                      border: '1.5px solid var(--stamp-red)',
+                      color: 'var(--stamp-red)',
+                      textTransform: 'uppercase',
+                    }}>⚠ NIGHTMARE</span>
+                  )}
+                  {(dream.tags || []).map((t) => (
+                    <span key={t} style={{
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: '0.55rem',
+                      letterSpacing: '0.1em',
+                      padding: '3px 8px',
+                      backgroundColor: 'var(--redact)',
+                      color: 'var(--paper)',
+                      textTransform: 'uppercase',
+                    }}>#{t}</span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>

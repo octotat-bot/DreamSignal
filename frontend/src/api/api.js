@@ -89,6 +89,23 @@ export const dreamsAPI = {
   getDreamStatus: async (id) => {
     const response = await api.get(`/dreams/status/${id}`);
     return parseResponse(DreamStatusResponse, response.data, 'GET /dreams/status/:id');
+  },
+  /**
+   * Triggers a browser download of the user's full dream archive as JSON.
+   * Returns nothing; side-effect is the file save dialog.
+   */
+  exportArchive: async () => {
+    const response = await api.get('/dreams/export', { responseType: 'blob' });
+    const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dreamsignal-archive-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => window.URL.revokeObjectURL(url), 0);
   }
 };
 

@@ -135,20 +135,32 @@ const TimelinePage = () => {
   const [total,         setTotal]         = useState(0);
   const [search,        setSearch]        = useState('');
   const [emotion,       setEmotion]       = useState('');
+  // Subjective-attribute filter chips. `null` = don't filter; `true` =
+  // only show dreams flagged with that attribute.
+  const [attrFilter,    setAttrFilter]    = useState({ lucid: null, recurring: null, nightmare: null });
 
   const LIMIT = 9;
 
   const loadDreams = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await dreamsAPI.getDreams({ page, limit: LIMIT, emotion: emotion || undefined });
+      const params = { page, limit: LIMIT, emotion: emotion || undefined };
+      if (attrFilter.lucid !== null)     params.lucid     = attrFilter.lucid;
+      if (attrFilter.recurring !== null) params.recurring = attrFilter.recurring;
+      if (attrFilter.nightmare !== null) params.nightmare = attrFilter.nightmare;
+      const res = await dreamsAPI.getDreams(params);
       setDreams(res.dreams);
       setTotal(res.total || res.dreams.length);
     } catch { toast.error('Failed to load archive.'); }
     finally { setLoading(false); }
-  }, [page, emotion]);
+  }, [page, emotion, attrFilter]);
 
   useEffect(() => { loadDreams(); }, [loadDreams]);
+
+  const toggleAttr = (key) => {
+    setPage(1);
+    setAttrFilter((prev) => ({ ...prev, [key]: prev[key] ? null : true }));
+  };
 
   // Separate, unfiltered fetch for the heatmap — we want the calendar to
   // reflect the user's entire ~6 month history regardless of which filter
@@ -240,6 +252,49 @@ const TimelinePage = () => {
         <span style={{ marginLeft: 'auto', fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--silver)', letterSpacing: '0.1em' }}>
           {total} FILES
         </span>
+      </div>
+
+      {/* Subjective attribute filter row */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        marginBottom: '24px',
+        paddingLeft: '8px',
+      }}>
+        <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--silver)', letterSpacing: '0.12em' }}>
+          ATTRIBUTES:
+        </span>
+        {[
+          { key: 'lucid',     label: 'LUCID' },
+          { key: 'recurring', label: 'RECURRING' },
+          { key: 'nightmare', label: 'NIGHTMARE' },
+        ].map((opt) => {
+          const active = attrFilter[opt.key] === true;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => toggleAttr(opt.key)}
+              aria-pressed={active}
+              style={{
+                backgroundColor: active ? 'var(--stamp-red)' : 'transparent',
+                border: `1px solid ${active ? 'var(--stamp-red)' : 'rgba(61,53,40,0.4)'}`,
+                color: active ? 'var(--paper)' : 'var(--ink-faded)',
+                fontFamily: '"Share Tech Mono", monospace',
+                fontSize: '0.55rem',
+                letterSpacing: '0.12em',
+                padding: '4px 10px',
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                transition: 'all 0.15s',
+              }}
+            >
+              {active ? '◉' : '○'} {opt.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Contact sheet grid */}

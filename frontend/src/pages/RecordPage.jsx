@@ -49,6 +49,8 @@ const CanvasWaveform = ({ stream }) => {
       ref={canvasRef}
       width={320}
       height={60}
+      role="img"
+      aria-label="Live audio waveform visualization of the current recording"
       style={{ width: '100%', height: '60px', backgroundColor: 'var(--redact)' }}
     />
   );
@@ -67,6 +69,23 @@ const RecordPage = () => {
   const [processing, setProcessing] = useState(false);
   const [dreamId,    setDreamId]    = useState(null);
   const [pollStatus, setPollStatus] = useState(null);
+
+  // Subjective dreamer-supplied metadata, captured before filing the report.
+  const [isLucid,     setIsLucid]     = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [isNightmare, setIsNightmare] = useState(false);
+  const [tagInput,    setTagInput]    = useState('');
+  const [tags,        setTags]        = useState([]);
+
+  const addTag = (raw) => {
+    const next = String(raw || '').trim().toLowerCase();
+    if (!next) return;
+    if (tags.includes(next)) return;
+    if (tags.length >= 12) return;
+    setTags((t) => [...t, next]);
+    setTagInput('');
+  };
+  const removeTag = (t) => setTags((arr) => arr.filter((x) => x !== t));
 
   const mediaRef    = useRef(null);
   const chunksRef   = useRef([]);
@@ -214,6 +233,12 @@ const RecordPage = () => {
         fd.append('inputType', 'audio');
         fd.append('audio', audioBlob, 'testimony.webm');
       }
+      // Subjective metadata — backend Zod schema decodes strings + JSON.
+      fd.append('isLucid', String(isLucid));
+      fd.append('isRecurring', String(isRecurring));
+      fd.append('isNightmare', String(isNightmare));
+      fd.append('tags', JSON.stringify(tags));
+
       const res = await dreamsAPI.createDream(fd);
       setDreamId(res.dreamId);
     } catch (err) {
@@ -420,6 +445,133 @@ const RecordPage = () => {
               <p style={{ fontFamily: '"Courier Prime", monospace', fontSize: '13px', color: 'var(--ink-faded)', lineHeight: 1.9, margin: 0 }}>
                 Provide as much detail as possible. The system extracts emotional signals, symbolic content, and cross-references with your previous case files.
               </p>
+            </div>
+
+            {/* Subjective case attributes — dreamer-supplied metadata */}
+            <div style={{ borderTop: '1px dashed rgba(61,53,40,0.3)', paddingTop: '20px', marginBottom: '20px' }}>
+              <div className="case-label" style={{ marginBottom: '12px' }}>CASE ATTRIBUTES</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+                {[
+                  { id: 'lucid',     label: 'LUCID',     value: isLucid,     set: setIsLucid,     hint: 'I was aware I was dreaming' },
+                  { id: 'recurring', label: 'RECURRING', value: isRecurring, set: setIsRecurring, hint: 'I have had this dream before' },
+                  { id: 'nightmare', label: 'NIGHTMARE', value: isNightmare, set: setIsNightmare, hint: 'This was distressing or terrifying' },
+                ].map((opt) => (
+                  <label
+                    key={opt.id}
+                    htmlFor={`attr-${opt.id}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '6px 10px',
+                      cursor: 'pointer',
+                      backgroundColor: opt.value ? 'rgba(184,134,11,0.12)' : 'transparent',
+                      border: `1px solid ${opt.value ? 'var(--fixer)' : 'rgba(61,53,40,0.2)'}`,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <input
+                      id={`attr-${opt.id}`}
+                      type="checkbox"
+                      checked={opt.value}
+                      onChange={(e) => opt.set(e.target.checked)}
+                      style={{ accentColor: 'var(--fixer)', cursor: 'pointer' }}
+                    />
+                    <span style={{
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: '0.6rem',
+                      letterSpacing: '0.14em',
+                      color: opt.value ? 'var(--ink)' : 'var(--silver)',
+                      minWidth: '78px',
+                    }}>
+                      {opt.label}
+                    </span>
+                    <span style={{
+                      fontFamily: '"Courier Prime", monospace',
+                      fontSize: '11px',
+                      fontStyle: 'italic',
+                      color: 'var(--ink-faded)',
+                    }}>
+                      {opt.hint}
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="case-label" style={{ marginBottom: '8px' }}>TAGS</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                {tags.map((t) => (
+                  <span
+                    key={t}
+                    style={{
+                      fontFamily: '"Share Tech Mono", monospace',
+                      fontSize: '0.55rem',
+                      letterSpacing: '0.1em',
+                      backgroundColor: 'var(--redact)',
+                      color: 'var(--paper)',
+                      padding: '4px 8px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {t}
+                    <button
+                      type="button"
+                      onClick={() => removeTag(t)}
+                      aria-label={`Remove tag ${t}`}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--paper)',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontFamily: 'inherit',
+                        fontSize: 'inherit',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+                {tags.length === 0 && (
+                  <span style={{
+                    fontFamily: '"Courier Prime", monospace',
+                    fontSize: '11px',
+                    fontStyle: 'italic',
+                    color: 'var(--silver)',
+                  }}>
+                    No tags. Add up to 12.
+                  </span>
+                )}
+              </div>
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    addTag(tagInput);
+                  }
+                }}
+                onBlur={() => addTag(tagInput)}
+                placeholder="ADD TAG + ENTER"
+                aria-label="Add tag"
+                disabled={tags.length >= 12}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  backgroundColor: 'transparent',
+                  border: '1px solid rgba(61,53,40,0.3)',
+                  fontFamily: '"Share Tech Mono", monospace',
+                  fontSize: '0.65rem',
+                  letterSpacing: '0.1em',
+                  color: 'var(--ink)',
+                  outline: 'none',
+                }}
+              />
             </div>
 
             <div style={{ borderTop: '1px dashed rgba(61,53,40,0.3)', paddingTop: '20px' }}>
