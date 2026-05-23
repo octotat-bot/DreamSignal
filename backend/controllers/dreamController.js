@@ -357,7 +357,13 @@ const getDreams = async (req, res, next) => {
 // @access  Private
 const getDreamById = async (req, res, next) => {
   try {
-    const dream = await Dream.findById(req.id || req.params.id).select('-embedding');
+    // Reject malformed ObjectIds with a clean 400 rather than letting
+    // Mongoose throw a CastError that surfaces as a 500.
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid dream id' });
+    }
+
+    const dream = await Dream.findById(req.params.id).select('-embedding');
     if (!dream) {
       return res.status(404).json({ message: 'Dream not found' });
     }

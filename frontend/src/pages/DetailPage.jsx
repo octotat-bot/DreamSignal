@@ -50,6 +50,10 @@ const DetailPage = () => {
   const toast = useToast();
   const [dream, setDream]       = useState(null);
   const [loading, setLoading]   = useState(true);
+  // Distinguishes "really missing" (404) from "server crashed" (500), so the
+  // error screen below can render a useful CTA rather than always insisting
+  // the file was destroyed.
+  const [errorKind, setErrorKind] = useState(null);
   const [showDelete, setShowDelete] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
 
@@ -57,9 +61,18 @@ const DetailPage = () => {
     const fetch = async () => {
       try {
         setLoading(true);
+        setErrorKind(null);
         setDream(await dreamsAPI.getDreamDetail(id));
-      } catch { toast.error('Case file not found.'); }
-      finally { setLoading(false); }
+      } catch (err) {
+        const status = err?.response?.status;
+        if (status === 404 || status === 403 || status === 400) {
+          setErrorKind('missing');
+          toast.error('Case file not found.');
+        } else {
+          setErrorKind('server');
+          toast.error('Archive temporarily unreachable.');
+        }
+      } finally { setLoading(false); }
     };
     fetch();
   }, [id]);
@@ -85,15 +98,33 @@ const DetailPage = () => {
     </div>
   );
 
-  if (!dream) return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '64px 48px', textAlign: 'center' }}>
-      <div className="case-label" style={{ marginBottom: '12px' }}>FILE NOT FOUND</div>
-      <p style={{ fontFamily: '"Courier Prime", monospace', color: 'var(--ink-faded)', marginBottom: '24px' }}>
-        This case file does not exist or has been destroyed.
-      </p>
-      <Link to="/dashboard" className="btn-stamp btn-stamp-ink">← RETURN TO DESK</Link>
-    </div>
-  );
+  if (!dream) {
+    const isServer = errorKind === 'server';
+    return (
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '64px 48px', textAlign: 'center' }}>
+        <div className="case-label" style={{ marginBottom: '12px' }}>
+          {isServer ? 'ARCHIVE UNREACHABLE' : 'FILE NOT FOUND'}
+        </div>
+        <p style={{ fontFamily: '"Courier Prime", monospace', color: 'var(--ink-faded)', marginBottom: '24px' }}>
+          {isServer
+            ? 'The records office is temporarily offline. Try again in a moment.'
+            : 'This case file does not exist or has been destroyed.'}
+        </p>
+        <div style={{ display: 'inline-flex', gap: '12px' }}>
+          {isServer && (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="btn-stamp btn-stamp-red"
+            >
+              ▶ RETRY
+            </button>
+          )}
+          <Link to="/dashboard" className="btn-stamp btn-stamp-ink">← RETURN TO DESK</Link>
+        </div>
+      </div>
+    );
+  }
 
   const emotionData = (dream.emotions || []).map(e => ({
     name: e.label.charAt(0).toUpperCase() + e.label.slice(1),
