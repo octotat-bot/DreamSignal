@@ -18,6 +18,7 @@ const RecordPage    = lazy(() => import('./pages/RecordPage'));
 const DetailPage    = lazy(() => import('./pages/DetailPage'));
 const TimelinePage  = lazy(() => import('./pages/TimelinePage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const ProfilePage   = lazy(() => import('./pages/ProfilePage'));
 
 /* Themed loading placeholder shown while a route chunk is being fetched.
    Matches the noir palette so the transition doesn't strobe white. */
@@ -123,6 +124,9 @@ const AppContent = () => {
                 } />
                 <Route path="/analytics" element={
                   <ProtectedRoute><PageWrapper><AnalyticsPage /></PageWrapper></ProtectedRoute>
+                } />
+                <Route path="/profile" element={
+                  <ProtectedRoute><PageWrapper><ProfilePage /></PageWrapper></ProtectedRoute>
                 } />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

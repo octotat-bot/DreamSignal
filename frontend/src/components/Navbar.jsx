@@ -7,6 +7,7 @@ const NAV_LINKS = [
   { to: '/record',    label: 'SIGNAL'   },
   { to: '/timeline',  label: 'EXPOSURE' },
   { to: '/analytics', label: 'PATTERNS' },
+  { to: '/profile',   label: 'DOSSIER'  },
 ];
 
 const Navbar = () => {
@@ -77,9 +78,24 @@ const Navbar = () => {
 
       {/* Right — Subject + Logout */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <span style={{ fontSize: '0.65rem', letterSpacing: '0.1em', color: 'var(--ink-faded)' }}>
-          SUBJECT: <span style={{ color: 'var(--ink)', textTransform: 'uppercase' }}>{user?.username}</span>
-        </span>
+        <Link
+          to="/profile"
+          title="View dossier"
+          style={{
+            fontSize: '0.65rem',
+            letterSpacing: '0.1em',
+            color: 'var(--ink-faded)',
+            textDecoration: 'none',
+          }}
+        >
+          SUBJECT: <span style={{
+            color: 'var(--ink)',
+            textTransform: 'uppercase',
+            textDecoration: 'underline',
+            textDecorationStyle: 'dotted',
+            textUnderlineOffset: '3px',
+          }}>{user?.username}</span>
+        </Link>
         <button
           onClick={handleLogout}
           className="btn-stamp btn-stamp-ink"

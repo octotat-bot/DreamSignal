@@ -121,19 +121,41 @@ echo -e "${BLUE}[FRONTEND]${NC} Starting Vite on http://localhost:5173 ..."
 FRONTEND_PID=$!
 
 # =============================================================================
-# READY BANNER (after a brief settle delay)
+# READY BANNER (after services settle + AI health check)
 # =============================================================================
-sleep 3
+AI_HEALTHY=0
+for _ in $(seq 1 30); do
+  if curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then
+    AI_HEALTHY=1
+    break
+  fi
+  sleep 1
+done
+
 echo ""
-echo -e "${GREEN}${BOLD}┌─────────────────────────────────────────────────┐${NC}"
-echo -e "${GREEN}${BOLD}│  Dream Signal is running!                        │${NC}"
-echo -e "${GREEN}${BOLD}│                                                  │${NC}"
-echo -e "${GREEN}${BOLD}│  Frontend  →  http://localhost:5173              │${NC}"
-echo -e "${GREEN}${BOLD}│  Backend   →  http://localhost:5001/api          │${NC}"
-echo -e "${GREEN}${BOLD}│  AI Svc    →  http://localhost:8000/health       │${NC}"
-echo -e "${GREEN}${BOLD}│                                                  │${NC}"
-echo -e "${GREEN}${BOLD}│  Press Ctrl+C to stop all services               │${NC}"
-echo -e "${GREEN}${BOLD}└─────────────────────────────────────────────────┘${NC}"
+if [[ $AI_HEALTHY -eq 1 ]]; then
+  echo -e "${GREEN}${BOLD}┌─────────────────────────────────────────────────┐${NC}"
+  echo -e "${GREEN}${BOLD}│  Dream Signal is running!                        │${NC}"
+  echo -e "${GREEN}${BOLD}│                                                  │${NC}"
+  echo -e "${GREEN}${BOLD}│  Frontend  →  http://localhost:5173              │${NC}"
+  echo -e "${GREEN}${BOLD}│  Backend   →  http://localhost:5001/api          │${NC}"
+  echo -e "${GREEN}${BOLD}│  AI Svc    →  http://localhost:8000/health  ✓  │${NC}"
+  echo -e "${GREEN}${BOLD}│                                                  │${NC}"
+  echo -e "${GREEN}${BOLD}│  Press Ctrl+C to stop all services               │${NC}"
+  echo -e "${GREEN}${BOLD}└─────────────────────────────────────────────────┘${NC}"
+else
+  echo -e "${YELLOW}${BOLD}┌─────────────────────────────────────────────────┐${NC}"
+  echo -e "${YELLOW}${BOLD}│  Dream Signal started — AI service NOT ready     │${NC}"
+  echo -e "${YELLOW}${BOLD}│                                                  │${NC}"
+  echo -e "${YELLOW}${BOLD}│  Frontend  →  http://localhost:5173              │${NC}"
+  echo -e "${YELLOW}${BOLD}│  Backend   →  http://localhost:5001/api          │${NC}"
+  echo -e "${YELLOW}${BOLD}│  AI Svc    →  http://localhost:8000  ✗ OFFLINE   │${NC}"
+  echo -e "${YELLOW}${BOLD}│                                                  │${NC}"
+  echo -e "${YELLOW}${BOLD}│  Voice recording will fail until AI is up.       │${NC}"
+  echo -e "${YELLOW}${BOLD}│  Check [AI-SVC] logs above for startup errors.   │${NC}"
+  echo -e "${YELLOW}${BOLD}│  Press Ctrl+C to stop all services               │${NC}"
+  echo -e "${YELLOW}${BOLD}└─────────────────────────────────────────────────┘${NC}"
+fi
 echo ""
 
 # Keep the script alive — forward all log streams until Ctrl+C

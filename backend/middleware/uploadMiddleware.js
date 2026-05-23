@@ -27,11 +27,14 @@ const storage = multer.diskStorage({
   }
 });
 
-// Enforce both extension and mimetype validation
+// Enforce extension OR mimetype validation. Browsers are inconsistent —
+// Chrome often labels audio-only webm as video/webm, Safari records mp4
+// but may still attach a .webm filename. Reject only when both signals
+// look wrong.
 const fileFilter = (req, file, cb) => {
-  const allowedExts = ['.wav', '.mp3', '.webm', '.ogg'];
+  const allowedExts = ['.wav', '.mp3', '.webm', '.ogg', '.m4a'];
   const ext = path.extname(file.originalname).toLowerCase();
-  
+
   const allowedMimeTypes = [
     'audio/wav',
     'audio/x-wav',
@@ -43,16 +46,20 @@ const fileFilter = (req, file, cb) => {
     'video/webm',
     'audio/ogg',
     'application/ogg',
-    'video/ogg'
+    'video/ogg',
+    'audio/mp4',
+    'video/mp4',
+    'audio/x-m4a',
+    'audio/m4a',
   ];
 
   const extValid = allowedExts.includes(ext);
-  const mimeValid = allowedMimeTypes.includes(file.mimetype.toLowerCase());
+  const mimeValid = allowedMimeTypes.includes((file.mimetype || '').toLowerCase());
 
-  if (extValid && mimeValid) {
+  if (extValid || mimeValid) {
     cb(null, true);
   } else {
-    cb(new Error(`Invalid file format. Matches for extensions [wav, mp3, webm, ogg] and correct audio mimetypes are required. Received Ext: ${ext}, Mime: ${file.mimetype}`), false);
+    cb(new Error(`Invalid file format. Allowed: wav, mp3, webm, ogg, m4a. Received ext=${ext || 'none'}, mime=${file.mimetype || 'none'}`), false);
   }
 };
 

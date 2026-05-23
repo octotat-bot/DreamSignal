@@ -10,6 +10,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
+const axios = require('axios');
 const rateLimit = require('express-rate-limit');
 const pinoHttp = require('pino-http');
 const { nanoid } = require('nanoid');
@@ -75,6 +76,20 @@ function createApp(options = {}) {
   app.use('/api/auth', authRoutes);
   app.use('/api/dreams', dreamRoutes);
   app.use('/api/analytics', analyticsRoutes);
+
+  // Lightweight health probe — frontend uses this to warn when voice
+  // transcription (AI service on :8000) is offline.
+  app.get('/api/health', async (req, res) => {
+    const aiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+    let ai = { status: 'offline', whisper_loaded: false };
+    try {
+      const { data } = await axios.get(`${aiUrl.replace(/\/$/, '')}/health`, { timeout: 3000 });
+      ai = { status: 'ok', whisper_loaded: !!data.whisper_loaded, ...data };
+    } catch (err) {
+      ai = { status: 'offline', error: err.code || err.message };
+    }
+    res.json({ status: 'ok', services: { ai } });
+  });
 
   app.use((req, res, next) => {
     res.status(404);

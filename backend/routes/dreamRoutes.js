@@ -15,7 +15,14 @@ const upload = require('../middleware/uploadMiddleware');
 router.use(protect); // All dream routes are protected
 
 // POST /api/dreams - Create a new dream note (supports multipart form for audio upload)
-router.post('/', upload.single('audio'), createDream);
+router.post('/', (req, res, next) => {
+  upload.single('audio')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'Audio upload failed' });
+    }
+    next();
+  });
+}, createDream);
 
 // GET /api/dreams/export - Download the entire archive as JSON
 router.get('/export', exportDreams);

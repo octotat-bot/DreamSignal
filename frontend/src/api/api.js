@@ -60,7 +60,16 @@ export const authAPI = {
   getMe: async () => {
     const response = await api.get('/auth/me');
     return response.data;
-  }
+  },
+  updatePassword: async ({ currentPassword, newPassword }) => {
+    const response = await api.patch('/auth/me/password', { currentPassword, newPassword });
+    return response.data;
+  },
+  deleteAccount: async ({ password }) => {
+    // axios DELETE with a body needs the request payload nested under `data`.
+    const response = await api.delete('/auth/me', { data: { password } });
+    return response.data;
+  },
 };
 
 export const dreamsAPI = {

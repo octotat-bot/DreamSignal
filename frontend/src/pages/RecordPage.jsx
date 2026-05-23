@@ -64,11 +64,13 @@ const RecordPage = () => {
   const [recording,  setRecording]  = useState(false);
   const [stream,     setStream]     = useState(null);
   const [audioBlob,  setAudioBlob]  = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [elapsed,    setElapsed]    = useState(0);
   const [transcript, setTranscript] = useState('');
   const [processing, setProcessing] = useState(false);
   const [dreamId,    setDreamId]    = useState(null);
   const [pollStatus, setPollStatus] = useState(null);
+  const [aiReady,    setAiReady]    = useState(true);
 
   // Subjective dreamer-supplied metadata, captured before filing the report.
   const [isLucid,     setIsLucid]     = useState(false);
@@ -88,8 +90,36 @@ const RecordPage = () => {
   const removeTag = (t) => setTags((arr) => arr.filter((x) => x !== t));
 
   const mediaRef    = useRef(null);
+  const streamRef   = useRef(null);
+  const mimeTypeRef = useRef('');
   const chunksRef   = useRef([]);
   const timerRef    = useRef(null);
+  const previewUrlRef = useRef(null);
+
+  const pickRecorderMimeType = () => {
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+    ];
+    for (const type of candidates) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    return '';
+  };
+
+  const audioFilenameFor = (blob) => {
+    const type = (blob?.type || mimeTypeRef.current || '').toLowerCase();
+    if (type.includes('mp4') || type.includes('m4a')) return 'testimony.m4a';
+    if (type.includes('ogg')) return 'testimony.ogg';
+    if (type.includes('wav')) return 'testimony.wav';
+    if (type.includes('mpeg') || type.includes('mp3')) return 'testimony.mp3';
+    return 'testimony.webm';
+  };
 
   /* ── Timer ── */
   useEffect(() => {
@@ -101,7 +131,40 @@ const RecordPage = () => {
     return () => clearInterval(timerRef.current);
   }, [recording]);
 
+  /* Revoke blob preview URLs when the take changes or the page unmounts. */
+  useEffect(() => {
+    if (!audioBlob) {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
+      setPreviewUrl(null);
+      return undefined;
+    }
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    const url = URL.createObjectURL(audioBlob);
+    previewUrlRef.current = url;
+    setPreviewUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+      previewUrlRef.current = null;
+    };
+  }, [audioBlob]);
+
   /* ── Subscribe to live processing events via SSE ── */
+  useEffect(() => {
+    if (tab !== 'voice') return undefined;
+    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api').replace(/\/$/, '');
+    fetch(`${base}/health`)
+      .then((r) => r.json())
+      .then((d) => {
+        const ai = d?.services?.ai;
+        setAiReady(ai?.status === 'ok' && ai?.whisper_loaded);
+      })
+      .catch(() => setAiReady(false));
+    return undefined;
+  }, [tab]);
+
   useEffect(() => {
     if (!dreamId) return;
 
@@ -182,27 +245,67 @@ const RecordPage = () => {
   /* ── Recording ── */
   const startRecording = async () => {
     try {
+      if (typeof MediaRecorder === 'undefined') {
+        toast.error('Voice recording is not supported in this browser.');
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast.error('Microphone access is not available (requires HTTPS or localhost).');
+        return;
+      }
+
+      // Clear any prior take before starting a new exposure.
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
+      setAudioBlob(null);
+
       const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = s;
       setStream(s);
       chunksRef.current = [];
-      mediaRef.current  = new MediaRecorder(s);
-      mediaRef.current.ondataavailable = e => chunksRef.current.push(e.data);
+
+      const mimeType = pickRecorderMimeType();
+      mimeTypeRef.current = mimeType;
+      mediaRef.current = mimeType
+        ? new MediaRecorder(s, { mimeType })
+        : new MediaRecorder(s);
+
+      mediaRef.current.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
       mediaRef.current.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        setAudioBlob(blob);
+        const type = mimeTypeRef.current || mediaRef.current?.mimeType || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type });
+        setAudioBlob(blob.size > 0 ? blob : null);
+        if (blob.size === 0) {
+          toast.error('No audio captured. Hold record and speak for a few seconds.');
+        }
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
         setStream(null);
       };
-      mediaRef.current.start();
+
+      mediaRef.current.onerror = () => {
+        toast.error('Recording failed mid-capture.');
+        setRecording(false);
+      };
+
+      // Timeslice ensures chunks arrive even on quick stops (Safari/Chrome).
+      mediaRef.current.start(250);
       setElapsed(0);
       setRecording(true);
-    } catch {
-      toast.error('Microphone access denied.');
+    } catch (err) {
+      const denied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError';
+      toast.error(denied ? 'Microphone access denied.' : 'Could not start microphone.');
     }
   };
 
   const stopRecording = () => {
-    mediaRef.current?.stop();
-    stream?.getTracks().forEach(t => t.stop());
+    if (!mediaRef.current || mediaRef.current.state === 'inactive') return;
+    mediaRef.current.stop();
     setRecording(false);
   };
 
@@ -221,17 +324,26 @@ const RecordPage = () => {
     } else if (!audioBlob) {
       toast.error('No audio recorded.');
       return;
+    } else if (audioBlob.size < 1000) {
+      toast.error('Recording too short or empty. Speak for at least a few seconds.');
+      return;
     }
 
     setProcessing(true);
     try {
+      if (tab === 'voice' && !aiReady) {
+        toast.error('Voice transcription service is offline. Restart the AI service.');
+        setProcessing(false);
+        return;
+      }
+
       const fd = new FormData();
       if (tab === 'text') {
         fd.append('inputType', 'text');
         fd.append('transcript', transcript.trim());
       } else {
         fd.append('inputType', 'audio');
-        fd.append('audio', audioBlob, 'testimony.webm');
+        fd.append('audio', audioBlob, audioFilenameFor(audioBlob));
       }
       // Subjective metadata — backend Zod schema decodes strings + JSON.
       fd.append('isLucid', String(isLucid));
@@ -290,6 +402,25 @@ const RecordPage = () => {
         {/* LEFT — Load Film */}
         <div className="dossier-card" style={{ padding: '32px' }}>
           <div className="case-label" style={{ marginBottom: '24px' }}>LOAD FILM / VOICE TESTIMONY</div>
+
+          {tab === 'voice' && !aiReady && (
+            <div
+              role="alert"
+              style={{
+                marginBottom: '16px',
+                padding: '12px 14px',
+                border: '1px dashed var(--stamp-red)',
+                backgroundColor: 'rgba(139,30,30,0.06)',
+                fontFamily: '"Courier Prime", monospace',
+                fontSize: '12px',
+                color: 'var(--stamp-red)',
+                lineHeight: 1.7,
+              }}
+            >
+              Voice transcription service is offline. Written statements still work.
+              Restart with <code style={{ fontFamily: '"Share Tech Mono", monospace' }}>bash scripts/start.sh</code> and wait for the AI service health check to pass.
+            </div>
+          )}
 
           {/* Tabs — folder style */}
           <div style={{ display: 'flex', gap: '1px', marginBottom: '24px', backgroundColor: 'rgba(61,53,40,0.2)' }}>
@@ -406,9 +537,9 @@ const RecordPage = () => {
 
                 {stream && <CanvasWaveform stream={stream} />}
 
-                {audioBlob && !recording && (
+                {audioBlob && previewUrl && !recording && (
                   <div style={{ marginTop: '16px' }}>
-                    <audio controls src={URL.createObjectURL(audioBlob)} style={{ width: '100%' }} />
+                    <audio controls src={previewUrl} style={{ width: '100%' }} />
                   </div>
                 )}
               </motion.div>

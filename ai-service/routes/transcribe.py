@@ -14,7 +14,7 @@ async def transcribe_audio(request: Request, file: UploadFile = File(...)):
     # Validate file extension
     filename = file.filename or ""
     ext = os.path.splitext(filename)[1].lower().replace(".", "")
-    allowed_exts = ["wav", "mp3", "webm", "ogg"]
+    allowed_exts = ["wav", "mp3", "webm", "ogg", "m4a", "mp4"]
     if ext not in allowed_exts:
         raise HTTPException(status_code=415, detail=f"Unsupported format: {ext or 'unknown'}")
 
