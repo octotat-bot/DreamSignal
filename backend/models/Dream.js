@@ -35,13 +35,6 @@ const DreamSchema = new mongoose.Schema({
     mood: { type: String, default: null }
   },
 
-  // Relative `/storage/images/<id>.png` path of the AI-generated dream scene.
-  // Populated only when IMAGEN_ENABLED=true on the AI service.
-  imagePath: {
-    type: String,
-    default: null
-  },
-
   emotions: [{
     label: { type: String, required: true },
     score: { type: Number, required: true }

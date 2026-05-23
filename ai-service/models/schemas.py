@@ -42,4 +42,3 @@ class AnalyzeResponse(BaseModel):
     symbols: List[SymbolItem]
     embedding: List[float]
     relatedDreams: List[RelatedDream]
-    imagePath: Optional[str] = None

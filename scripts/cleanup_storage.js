@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Delete orphaned audio + image files under storage/ that are no longer
+ * Delete orphaned audio files under storage/ that are no longer
  * referenced by any Dream document. Designed to be run as a periodic
  * cron job (daily is plenty for a single-user journal):
  *
@@ -8,10 +8,10 @@
  *     node scripts/cleanup_storage.js --apply      # actually delete
  *     node scripts/cleanup_storage.js --max-age=30 # only orphans >30 days old
  *
- * Connects to the same MONGO_URI the backend uses (loaded from
- * backend/.env), enumerates files in storage/audio and storage/images,
- * looks up which paths are still referenced, and removes the unreferenced
- * ones older than --max-age days.
+ * Connects to the same MONGODB_URI the backend uses (loaded from
+ * backend/.env), enumerates files in storage/audio, looks up which
+ * audioPaths are still referenced, and removes the unreferenced ones
+ * older than --max-age days.
  */
 
 const fs = require('fs');
@@ -73,14 +73,13 @@ async function main() {
   await mongoose.connect(mongoUri);
 
   // Gather every relative path the DB still references.
-  const dreams = await Dream.find({}).select('audioPath imagePath').lean();
+  const dreams = await Dream.find({}).select('audioPath').lean();
   const referenced = new Set();
   for (const d of dreams) {
     if (d.audioPath) referenced.add(d.audioPath);
-    if (d.imagePath) referenced.add(d.imagePath);
   }
 
-  const candidates = [...enumerateFiles('audio'), ...enumerateFiles('images')];
+  const candidates = enumerateFiles('audio');
 
   const orphans = candidates.filter(
     (c) => !referenced.has(c.relPath) && c.ageMs >= maxAgeMs

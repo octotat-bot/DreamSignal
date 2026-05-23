@@ -176,7 +176,6 @@ const processDream = async (dreamId, userId, file, requestId = null) => {
       emotionalIntensity: analysisResult.emotionalIntensity,
       symbols: analysisResult.symbols,
       embedding: analysisResult.embedding,
-      imagePath: analysisResult.imagePath || null,
       relatedDreams: analysisResult.relatedDreams.map(r => ({
         dreamId: r.dreamId,
         similarity: r.similarity,

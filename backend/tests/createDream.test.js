@@ -25,7 +25,6 @@ vi.mock('../services/aiService', () => ({
     symbols: [{ label: 'water', score: 0.5 }],
     embedding: new Array(384).fill(0),
     relatedDreams: [],
-    imagePath: null,
   })),
 }));
 

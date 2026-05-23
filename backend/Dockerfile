@@ -18,7 +18,7 @@ COPY backend/ ./backend/
 # Maintenance scripts (run as separate compose services, e.g. cleanup cron).
 COPY scripts/ ./scripts/
 
-RUN mkdir -p storage/audio storage/temp storage/images
+RUN mkdir -p storage/audio storage/temp
 
 ENV NODE_ENV=production
 ENV PORT=5001

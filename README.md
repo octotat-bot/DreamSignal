@@ -39,9 +39,7 @@ Dream Signal is a cinematic, premium-grade dream intelligence application design
                                                   v Gemini API
                                         +-----------------+
                                         | gemini-2.5-flash|
-                                        | + imagen-4.* *  |
                                         +-----------------+
-                                        * paid tier only
 ```
 
 ---
@@ -54,7 +52,6 @@ Dream Signal is a cinematic, premium-grade dream intelligence application design
 - **Symbol Extraction** — local zero-shot classifier scoring the transcript against ~50 archetypal Jungian symbols (configurable via `SYMBOL_LABELS`). Same approach as emotions; tunable threshold + top-k.
 - **Subconscious Connection** — 384-dim dense vectors via `all-MiniLM-L6-v2` with an LRU cache and cosine similarity to surface related dreams.
 - **Psychoanalytic Interpretation** — deep Jungian interpretations from Google `gemini-2.5-flash` via structured JSON schemas.
-- **Dream-Scene Imagery (opt-in, paid Gemini tier only)** — when `IMAGEN_ENABLED=true` and the project has billing enabled, `imagen-4.0-fast-generate-001` (with automatic fallback to `gemini-2.5-flash-image`) renders a 16:9 cinematic still from the dream's cinematic description, surfaced as an "evidence photo" on the detail page. Free-tier keys soft-fail with a clear billing message.
 - **Real-time Processing Stamps** — Server-Sent Events stream pipeline stage transitions (`transcribing → analyzing → archived`), so the "Developing Film" screen animates live instead of polling.
 - **Pattern Analytics** — Recharts dashboards plus a GitHub-style mood calendar heatmap covering the last 26 weeks.
 - **Shared API Contracts** — Zod schemas in `shared/contracts.js` are the single source of truth, validated on the backend and parsed on the frontend so contract drift is caught at the boundary.
@@ -103,12 +100,11 @@ dream/
 │   ├── setup.sh            # One-time install (Node, Python venv, env files)
 │   ├── start.sh            # Launches all three services with prefixed logs
 │   ├── stop.sh             # Kills anything left on ports 5001 / 5173 / 8001
-│   └── cleanup_storage.js  # Deletes orphan audio/image files not referenced by any Dream
+│   └── cleanup_storage.js  # Deletes orphan audio files not referenced by any Dream
 ├── docker-compose.yml      # One-command stack (mongo + ai + backend + frontend)
 ├── .env.example            # Compose env template
 └── storage/                # Media storage directory (mounted as a volume in compose)
     ├── audio/              # Transferred webm files
-    ├── images/             # AI-generated dream scenes (Imagen)
     └── temp/               # Temporary uploads
 ```
 
@@ -147,11 +143,8 @@ PORT=8000
 HOST=127.0.0.1
 GEMINI_API_KEY=your_gemini_api_key_here
 HUGGINGFACE_API_KEY=your_huggingface_api_key_here  # optional, silences HF download warning
-IMAGEN_ENABLED=false                               # paid Gemini tier only; see note below
-IMAGEN_MODEL=imagen-4.0-fast-generate-001
 WHISPER_MODEL_SIZE=base                            # tiny | base | small | medium
 ```
-> Imagen note: `imagen-3.*` is retired and `imagen-4.*` requires billing enabled on the Gemini project. The service handles the 429/400 errors gracefully and leaves `imagePath` null on free tier.
 Run:
 ```bash
 python main.py

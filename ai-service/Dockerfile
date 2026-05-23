@@ -16,7 +16,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY ai-service/ ./
 
 ENV PYTHONUNBUFFERED=1
-ENV STORAGE_ROOT=/app/storage
 EXPOSE 8001
 
 CMD ["python", "main.py"]

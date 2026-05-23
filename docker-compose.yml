@@ -7,8 +7,7 @@
 #   JWT_SECRET            — any 32+ char random string
 # Optional:
 #   HUGGINGFACE_API_KEY   — silences "unauthenticated requests" warning
-#                           and raises symbol-classifier rate limits
-#   IMAGEN_ENABLED        — set to true to generate dream-scene images
+#                           on HF model downloads
 #   WHISPER_MODEL         — tiny | base (default) | small | medium
 
 services:
@@ -52,18 +51,9 @@ services:
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-}
-      IMAGEN_ENABLED: ${IMAGEN_ENABLED:-false}
-      # imagen-3.* models are retired on the public Gemini API. imagen-4.0-fast
-      # is the cheapest/quickest currently-supported tier; override here only
-      # if you've explicitly opted into a different model in Google Cloud.
-      IMAGEN_MODEL: ${IMAGEN_MODEL:-imagen-4.0-fast-generate-001}
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
-      STORAGE_ROOT: /app/storage
       PORT: "8001"
     volumes:
-      # Shared storage so generated images and uploaded audio are reachable
-      # by the backend's express.static('/storage') mount.
-      - ./storage:/app/storage
       # Cache HF / Whisper model downloads between container restarts.
       - hf_cache:/root/.cache/huggingface
       - whisper_cache:/root/.cache/whisper

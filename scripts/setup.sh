@@ -74,8 +74,7 @@ header "Creating Storage Directories"
 
 mkdir -p "$REPO_ROOT/storage/audio"
 mkdir -p "$REPO_ROOT/storage/temp"
-mkdir -p "$REPO_ROOT/storage/images"
-success "storage/audio  +  storage/temp  +  storage/images  ready"
+success "storage/audio  +  storage/temp  ready"
 
 # =============================================================================
 # 3. ENVIRONMENT FILE BOOTSTRAP

@@ -268,58 +268,6 @@ const DetailPage = () => {
           {/* LEFT COL */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
-            {/* Developed dream-scene photograph (AI-generated) */}
-            {dream.imagePath && (
-              <div>
-                <div className="case-label" style={{ marginBottom: '12px' }}>
-                  EVIDENCE PHOTO — DEVELOPED FROM TESTIMONY
-                </div>
-                <div
-                  style={{
-                    position: 'relative',
-                    backgroundColor: 'var(--redact)',
-                    padding: '12px',
-                    boxShadow:
-                      'inset 0 0 0 2px var(--fixer), 0 0 0 1px rgba(61,53,40,0.4), 0 6px 22px rgba(15,14,12,0.35)',
-                  }}
-                >
-                  <img
-                    src={`${(import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api').replace(/\/api\/?$/, '')}${dream.imagePath}`}
-                    alt={dream.analysis?.title || 'Dream scene'}
-                    style={{
-                      width: '100%',
-                      display: 'block',
-                      filter: 'sepia(0.18) saturate(0.85) contrast(1.05) brightness(0.95)',
-                    }}
-                    onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
-                  />
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: '12px',
-                      pointerEvents: 'none',
-                      backgroundImage:
-                        'radial-gradient(ellipse at center, transparent 55%, rgba(15,14,12,0.55) 100%)',
-                    }}
-                  />
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      marginTop: '8px',
-                      fontFamily: '"Share Tech Mono", monospace',
-                      fontSize: '0.55rem',
-                      color: 'var(--silver)',
-                      letterSpacing: '0.12em',
-                    }}
-                  >
-                    <span>▶ EXHIBIT A — RECONSTRUCTED SCENE</span>
-                    <span>FRAME 01 / 01</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Cinematic description */}
             {dream.analysis?.cinematicDescription && (
               <div>

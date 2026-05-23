@@ -1,20 +1,9 @@
-import os
 from fastapi import APIRouter, HTTPException, Request
 from models.schemas import AnalyzeRequest, AnalyzeResponse, AnalysisDetail, EmotionItem, SymbolItem, RelatedDream
 import traceback
 
 router = APIRouter()
 
-
-def _storage_root() -> str:
-    """Resolve the shared storage folder. Defaults to <repo-root>/storage
-    so the AI service writes images that the Express backend serves over
-    the existing /storage static mount."""
-    env = os.getenv("STORAGE_ROOT")
-    if env:
-        return env
-    here = os.path.dirname(os.path.abspath(__file__))
-    return os.path.normpath(os.path.join(here, "..", "..", "storage"))
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_dream(request: Request, body: AnalyzeRequest):
@@ -103,25 +92,6 @@ async def analyze_dream(request: Request, body: AnalyzeRequest):
                 "mood": "Neutral"
             }
 
-    # Step 7: Optional dream-scene image generation (Imagen via google-genai).
-    # Disabled by default — opt in via IMAGEN_ENABLED=true in the AI service .env.
-    # Soft-fails so a missing image never blocks the rest of the analysis.
-    image_path = None
-    try:
-        if gemini_service:
-            scene_prompt = (
-                analysis.get("cinematicDescription")
-                or analysis.get("summary")
-                or transcript[:500]
-            )
-            if scene_prompt:
-                rel_path = f"images/{body.dream_id}.png"
-                abs_path = os.path.join(_storage_root(), rel_path)
-                if gemini_service.generate_image(scene_prompt, abs_path):
-                    image_path = f"/storage/{rel_path}"
-    except Exception as err:
-        print(f"Image generation step failed: {err}")
-
     # Normalize objects for response model validation
     emotion_items = [EmotionItem(label=e["label"], score=e["score"]) for e in emotions]
     symbol_items = [SymbolItem(label=s["label"], score=s["score"]) for s in symbols]
@@ -148,5 +118,4 @@ async def analyze_dream(request: Request, body: AnalyzeRequest):
         symbols=symbol_items,
         embedding=embedding,
         relatedDreams=related_dream_items,
-        imagePath=image_path,
     )
