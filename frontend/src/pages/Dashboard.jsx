@@ -229,7 +229,16 @@ const Dashboard = () => {
           },
           { label: 'LAST EXPOSURE',     value: lastDate,                  sub: 'most recent entry'},
         ].map(({ label, value, sub }, i) => (
-          <div key={label} className="dossier-card" style={{ padding: '20px 24px' }}>
+          <div
+            key={label}
+            className="dossier-card"
+            data-tour={
+              label === 'CASES FILED'     ? 'cases-filed' :
+              label === 'DOMINANT SIGNAL' ? 'dominant-signal' :
+              undefined
+            }
+            style={{ padding: '20px 24px' }}
+          >
             <div className="case-label" style={{ marginBottom: '8px' }}>{label}</div>
             <div style={{
               fontFamily: '"Special Elite", serif',
@@ -308,7 +317,7 @@ const Dashboard = () => {
               </Link>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', backgroundColor: 'rgba(61,53,40,0.2)' }}>
+            <div data-tour="contact-sheet" style={{ display: 'flex', flexDirection: 'column', gap: '1px', backgroundColor: 'rgba(61,53,40,0.2)' }}>
               {recentDreams.map((dream, i) => (
                 <motion.div
                   key={dream._id}
@@ -383,6 +392,7 @@ const Dashboard = () => {
               <Link
                 key={to}
                 to={to}
+                data-tour={to === '/record' ? 'record' : undefined}
                 style={{
                   display: 'flex',
                   gap: '12px',

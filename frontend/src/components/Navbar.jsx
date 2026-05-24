@@ -18,7 +18,7 @@ const Navbar = () => {
   const handleLogout = () => { logout(); window.location.replace('/'); };
 
   return (
-    <nav style={{
+    <nav data-tour="navigation" style={{
       position: 'fixed',
       top: 0,
       left: 0,
