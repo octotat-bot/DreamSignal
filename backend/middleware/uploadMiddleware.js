@@ -1,31 +1,13 @@
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+const { uploadToCloudinary } = require('../config/cloudinary');
+const rootLogger = require('../services/logger').child({ scope: 'uploadMiddleware' });
 
-// Resolve path to storage folders
-const tempDir = path.join(__dirname, '../../storage/temp');
-const audioDir = path.join(__dirname, '../../storage/audio');
-
-// Double check storage folder presence
-if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true });
-}
-if (!fs.existsSync(audioDir)) {
-  fs.mkdirSync(audioDir, { recursive: true });
-}
-
-// Multer storage engine configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, tempDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    // Save file as a UUID.ext for anonymity & safety
-    cb(null, `${uuidv4()}${ext}`);
-  }
-});
+// ─────────────────────────────────────────────────────────────────────────────
+// Multer — memory storage. The buffer is streamed straight to Cloudinary;
+// no local temp files are written.
+// ─────────────────────────────────────────────────────────────────────────────
+const memoryStorage = multer.memoryStorage();
 
 // Enforce extension OR mimetype validation. Browsers are inconsistent —
 // Chrome often labels audio-only webm as video/webm, Safari records mp4
@@ -64,11 +46,61 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
+  storage: memoryStorage,
+  fileFilter,
   limits: {
     fileSize: 25 * 1024 * 1024 // 25 MB limit
   }
 });
 
-module.exports = upload;
+/**
+ * Combined middleware: multer (memory) → Cloudinary upload_stream.
+ *
+ * After this middleware runs, `req.file` (if present) has two extra
+ * properties:
+ *   - `cloudinaryUrl`      — the HTTPS secure_url for the uploaded audio
+ *   - `cloudinaryPublicId`  — the public_id needed for future deletion
+ *
+ * Cloudinary treats audio as resource_type "video".
+ */
+const audioUpload = (req, res, next) => {
+  upload.single('audio')(req, res, async (multerErr) => {
+    if (multerErr) {
+      const message =
+        multerErr.code === 'LIMIT_FILE_SIZE'
+          ? 'Audio file must be under 25 MB.'
+          : multerErr.message || 'Audio upload failed';
+      return res.status(400).json({ message });
+    }
+
+    // Text-only submissions — no file to upload
+    if (!req.file) return next();
+
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase().replace('.', '') || 'webm';
+
+      const result = await uploadToCloudinary(req.file.buffer, {
+        resource_type: 'video',
+        folder: 'dreamsignal/audio',
+        format: ext,
+      });
+
+      req.file.cloudinaryUrl = result.secure_url;
+      req.file.cloudinaryPublicId = result.public_id;
+
+      rootLogger.debug(
+        { publicId: result.public_id, bytes: result.bytes },
+        'Audio uploaded to Cloudinary'
+      );
+
+      next();
+    } catch (err) {
+      rootLogger.error({ err: err.message }, 'Cloudinary audio upload failed');
+      return res.status(502).json({
+        message: 'Audio upload to cloud storage failed. Please try again.',
+      });
+    }
+  });
+};
+
+module.exports = audioUpload;

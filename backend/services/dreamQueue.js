@@ -17,13 +17,11 @@
  *   - Workers run in-process for simplicity. For a multi-instance
  *     deployment, split the worker out into its own process and have it
  *     `require('./dreamController').processDream` directly.
- *   - File uploads are persisted to `storage/temp/` before the HTTP
- *     handler returns, so the file path is durable and safe to pass
- *     through a serialized job payload.
+ *   - Audio files are uploaded to Cloudinary before the job is enqueued,
+ *     so only the Cloudinary URL (a plain string) needs to be serialized
+ *     into the job payload.
  */
 
-const path = require('path');
-const fs = require('fs');
 const logger = require('./logger').child({ scope: 'dreamQueue' });
 
 const QUEUE_NAME = 'dream-processing';
@@ -83,11 +81,8 @@ function init() {
         // Require here too, to break the circular require with
         // dreamController (which itself requires this file).
         const { processDream } = require('../controllers/dreamController');
-        const { dreamId, userId, filePath, originalName, mimetype, requestId } = job.data;
-        const file = filePath
-          ? { path: filePath, originalname: originalName, mimetype }
-          : null;
-        await processDream(dreamId, userId, file, requestId);
+        const { dreamId, userId, audioUrl, requestId } = job.data;
+        await processDream(dreamId, userId, audioUrl || null, requestId);
       },
       {
         connection: conn.duplicate(),
@@ -113,36 +108,23 @@ function init() {
 }
 
 /**
- * Persist an uploaded file to a stable path so a queued job can find it
- * later even if the original multer-managed path was a tmp upload that
- * the OS might reap. Returns the new stable absolute path.
- */
-function persistUpload(file) {
-  if (!file) return null;
-  const safeName = `${Date.now()}-${(file.originalname || 'audio').replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-  const stableDir = path.join(__dirname, '../../storage/temp');
-  if (!fs.existsSync(stableDir)) fs.mkdirSync(stableDir, { recursive: true });
-  const stablePath = path.join(stableDir, safeName);
-  if (file.path !== stablePath) fs.renameSync(file.path, stablePath);
-  return stablePath;
-}
-
-/**
  * Enqueue a dream for background processing. Falls back to inline
  * execution if the queue isn't initialized.
+ *
+ * @param {string}      dreamId    - Mongoose ObjectId of the dream document
+ * @param {string}      userId     - Mongoose ObjectId of the owning user
+ * @param {string|null} audioUrl   - Cloudinary URL of the uploaded audio (null for text dreams)
+ * @param {string|null} requestId  - x-request-id for log correlation
  */
-async function enqueueDream(dreamId, userId, file, requestId) {
+async function enqueueDream(dreamId, userId, audioUrl, requestId) {
   const queued = await init();
   if (queued && queue) {
-    const stablePath = persistUpload(file);
     await queue.add(
       'process',
       {
         dreamId: String(dreamId),
         userId: String(userId),
-        filePath: stablePath,
-        originalName: file?.originalname || null,
-        mimetype: file?.mimetype || null,
+        audioUrl: audioUrl || null,
         requestId: requestId || null,
       },
       {
@@ -157,7 +139,7 @@ async function enqueueDream(dreamId, userId, file, requestId) {
 
   // Inline fallback — identical to the pre-queue fire-and-forget pattern.
   const { processDream } = require('../controllers/dreamController');
-  processDream(dreamId, userId, file, requestId).catch((err) => {
+  processDream(dreamId, userId, audioUrl || null, requestId).catch((err) => {
     logger.error({ err: err.message, dreamId: String(dreamId) }, 'Inline pipeline error');
   });
   return { mode: 'inline' };

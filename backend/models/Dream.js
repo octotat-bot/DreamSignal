@@ -20,6 +20,10 @@ const DreamSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  audioPublicId: {
+    type: String,
+    default: null
+  },
   audioDuration: {
     type: Number,
     default: null

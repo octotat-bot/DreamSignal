@@ -1,5 +1,3 @@
-const fs = require('fs');
-const path = require('path');
 const User = require('../models/User');
 const Dream = require('../models/Dream');
 const Pattern = require('../models/Pattern');
@@ -196,18 +194,14 @@ const deleteAccount = async (req, res, next) => {
       }
     }
 
-    // Sweep on-disk audio files first so a partial DB failure can't leave
-    // orphaned binaries behind. The cleanup_storage script can mop up later
-    // if anything escapes here.
-    const dreams = await Dream.find({ userId: user._id }).select('audioPath').lean();
+    // Destroy Cloudinary audio files for all user's dreams
+    const dreams = await Dream.find({ userId: user._id }).select('audioPublicId').lean();
     for (const dream of dreams) {
-      if (!dream.audioPath) continue;
-      const rel = dream.audioPath.replace(/^\/storage\//, '');
-      const abs = path.join(__dirname, '../../storage', rel);
+      if (!dream.audioPublicId) continue;
       try {
-        if (fs.existsSync(abs)) fs.unlinkSync(abs);
+        await deleteFromCloudinary(dream.audioPublicId);
       } catch (err) {
-        log.warn({ err: err.message, abs }, 'Failed to unlink dream audio during account deletion');
+        log.warn({ err: err.message, publicId: dream.audioPublicId }, 'Failed to delete dream audio from Cloudinary during account deletion');
       }
     }
 

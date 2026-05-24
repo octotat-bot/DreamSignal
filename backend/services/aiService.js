@@ -56,6 +56,53 @@ const transcribeAudio = async (filePath, opts = {}, attempt = 1) => {
 };
 
 /**
+ * Sends a Cloudinary audio URL to FastAPI for transcription.
+ * The AI service downloads the file from the URL before running Whisper.
+ *
+ * @param {string} audioUrl
+ * @param {object} [opts]
+ * @param {string} [opts.requestId]
+ * @param {object} [opts.log]
+ */
+const transcribeAudioUrl = async (audioUrl, opts = {}, attempt = 1) => {
+  const { requestId, log = rootLogger } = opts;
+  try {
+    const form = new FormData();
+    form.append('audio_url', audioUrl);
+
+    const headers = { ...form.getHeaders() };
+    if (requestId) headers['x-request-id'] = requestId;
+
+    const response = await axios.post(`${AI_SERVICE_URL}/transcribe`, form, {
+      headers,
+      timeout: 90000, // 90 seconds — includes download time from Cloudinary
+    });
+
+    return response.data;
+  } catch (error) {
+    const status = error.response?.status;
+    const detail = error.response?.data?.detail;
+    const detailText = typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((d) => d.msg || d.message || JSON.stringify(d)).join('; ')
+        : detail?.message || error.message;
+
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      log.error({ attempt, err: error.message, AI_SERVICE_URL }, 'AI service unreachable');
+      throw new Error('Voice transcription service is offline. Start the AI service (port 8000) and try again.');
+    }
+
+    log.warn({ attempt, status, err: detailText }, 'Transcription (URL) attempt failed');
+    if (attempt <= 2) {
+      log.info({ nextAttempt: attempt + 1 }, 'Retrying transcription');
+      return transcribeAudioUrl(audioUrl, opts, attempt + 1);
+    }
+    throw new Error(detailText || 'Audio transcription pipeline failed after 3 attempts.');
+  }
+};
+
+/**
  * Sends transcript and historical embeddings to FastAPI for analysis.
  * Timeout: 50 seconds.
  */
@@ -90,5 +137,6 @@ const analyzeDream = async (transcript, dreamId, userId, existingEmbeddings = []
 
 module.exports = {
   transcribeAudio,
+  transcribeAudioUrl,
   analyzeDream,
 };

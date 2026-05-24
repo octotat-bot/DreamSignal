@@ -1,5 +1,3 @@
-const fs = require('fs');
-const path = require('path');
 const mongoose = require('mongoose');
 const Dream = require('../models/Dream');
 const User = require('../models/User');
@@ -7,6 +5,7 @@ const Pattern = require('../models/Pattern');
 const aiService = require('../services/aiService');
 const dreamEvents = require('../services/dreamEvents');
 const dreamQueue = require('../services/dreamQueue');
+const { deleteFromCloudinary } = require('../config/cloudinary');
 const rootLogger = require('../services/logger').child({ scope: 'dreamController' });
 
 // shared/contracts.js is authored as native ESM (so the browser can
@@ -105,10 +104,8 @@ const recomputePatterns = async (userId) => {
  * `requestId` is forwarded from the originating HTTP request so log lines
  * here can be grep-correlated with the createDream handler that started us.
  */
-const processDream = async (dreamId, userId, file, requestId = null) => {
+const processDream = async (dreamId, userId, audioUrl = null, requestId = null) => {
   const log = rootLogger.child({ dreamId: String(dreamId), userId: String(userId), requestId });
-  let audioTempPath = file ? file.path : null;
-  let finalAudioPath = null;
 
   try {
     // 1. Set status to processing
@@ -118,26 +115,17 @@ const processDream = async (dreamId, userId, file, requestId = null) => {
     let transcript = '';
     let duration = null;
 
-    // 2. If audio, call FastAPI /transcribe
-    if (audioTempPath) {
-      log.info('Transcribing audio');
+    // 2. If audio, call FastAPI /transcribe with the Cloudinary URL
+    if (audioUrl) {
+      log.info('Transcribing audio via Cloudinary URL');
       dreamEvents.emit(dreamId, { stage: 'transcribing', processingStatus: 'processing' });
-      const transcriptionResult = await aiService.transcribeAudio(audioTempPath, { requestId, log });
+      const transcriptionResult = await aiService.transcribeAudioUrl(audioUrl, { requestId, log });
       transcript = transcriptionResult.transcript;
       duration = transcriptionResult.duration_seconds;
 
-      // Move file from temp to storage/audio
-      const ext = path.extname(audioTempPath);
-      const audioFilename = `${path.basename(audioTempPath, ext)}${ext}`;
-      const targetPath = path.join(__dirname, '../../storage/audio', audioFilename);
-
-      fs.renameSync(audioTempPath, targetPath);
-      finalAudioPath = `/storage/audio/${audioFilename}`; // relative route path for serving
-
-      // Update transcript in DB
+      // Update transcript + duration in DB (audioPath is already set by createDream)
       await Dream.findByIdAndUpdate(dreamId, {
         rawTranscript: transcript,
-        audioPath: finalAudioPath,
         audioDuration: duration
       });
     } else {
@@ -203,15 +191,6 @@ const processDream = async (dreamId, userId, file, requestId = null) => {
       processingStatus: 'failed',
       processingError: error.message || 'Dream processing pipeline failed.',
     });
-
-    // Cleanup temp audio file if error occurs and file exists
-    if (audioTempPath && fs.existsSync(audioTempPath)) {
-      try {
-        fs.unlinkSync(audioTempPath);
-      } catch (cleanupErr) {
-        log.warn({ err: cleanupErr.message }, 'Failed to delete temp audio on crash');
-      }
-    }
   }
 };
 
@@ -237,11 +216,17 @@ const createDream = async (req, res, next) => {
       return res.status(400).json({ message: 'Audio file is required for audio submission' });
     }
 
-    // 1. Create initial dream doc
+    // Extract Cloudinary info from the upload middleware (set for audio submissions)
+    const audioUrl = file?.cloudinaryUrl || null;
+    const audioPublicId = file?.cloudinaryPublicId || null;
+
+    // 1. Create initial dream doc — audioPath is the Cloudinary URL
     const newDream = new Dream({
       userId: req.user.id,
       inputType,
       rawTranscript: inputType === 'text' ? transcript.trim() : 'Processing voice recording...',
+      audioPath: audioUrl,
+      audioPublicId,
       tags: tags || [],
       isLucid: !!isLucid,
       isRecurring: !!isRecurring,
@@ -263,7 +248,7 @@ const createDream = async (req, res, next) => {
     // 4. Hand off to BullMQ when Redis is available, otherwise the queue
     //    transparently falls back to inline fire-and-forget execution.
     dreamQueue
-      .enqueueDream(newDream._id, req.user.id, file, req.id)
+      .enqueueDream(newDream._id, req.user.id, audioUrl, req.id)
       .catch((err) => {
         rootLogger.error(
           { err: err.message, dreamId: String(newDream._id) },
@@ -393,16 +378,12 @@ const deleteDream = async (req, res, next) => {
       return res.status(403).json({ message: 'Access denied to this dream resource' });
     }
 
-    // Delete audio file from storage if present
-    if (dream.audioPath) {
-      const audioFileRelative = dream.audioPath.replace(/^\/storage\//, '');
-      const audioFilePath = path.join(__dirname, '../../storage', audioFileRelative);
-      if (fs.existsSync(audioFilePath)) {
-        try {
-          fs.unlinkSync(audioFilePath);
-        } catch (unlinkErr) {
-          rootLogger.warn({ err: unlinkErr.message, audioFilePath }, 'Failed to unlink audio file');
-        }
+    // Delete audio file from Cloudinary if present
+    if (dream.audioPublicId) {
+      try {
+        await deleteFromCloudinary(dream.audioPublicId);
+      } catch (cloudErr) {
+        rootLogger.warn({ err: cloudErr.message, publicId: dream.audioPublicId }, 'Failed to delete audio from Cloudinary');
       }
     }
 
