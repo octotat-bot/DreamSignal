@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
-import { dreamsAPI } from '../api/api';
+import api, { dreamsAPI } from '../api/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProcessingStamps from '../components/ProcessingStamps';
 import CoffeeRing from '../components/CoffeeRing';
@@ -187,11 +187,10 @@ const RecordPage = () => {
   /* ── Subscribe to live processing events via SSE ── */
   useEffect(() => {
     if (tab !== 'voice') return undefined;
-    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api').replace(/\/$/, '');
-    fetch(`${base}/health`)
-      .then((r) => r.json())
-      .then((d) => {
-        const ai = d?.services?.ai;
+    // Use the shared api instance so the URL normalization in api.js applies.
+    api.get('/health')
+      .then((res) => {
+        const ai = res.data?.services?.ai;
         setAiReady(ai?.status === 'ok' && ai?.whisper_loaded);
       })
       .catch(() => setAiReady(false));
@@ -202,7 +201,9 @@ const RecordPage = () => {
     if (!dreamId) return;
 
     const token = localStorage.getItem('dream_token');
-    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api').replace(/\/$/, '');
+    // Derive the SSE base URL from the api instance's resolved baseURL so it
+    // benefits from the same origin-normalization applied in api.js.
+    const base = (api.defaults.baseURL || 'http://localhost:5001/api').replace(/\/$/, '');
     const url = `${base}/dreams/events/${dreamId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 
     let pollFallback = null;
