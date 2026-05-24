@@ -6,16 +6,13 @@
 #   3. Connect the repo — Render reads this file automatically
 #   4. Fill secret env vars when prompted (MONGODB_URI, GEMINI_API_KEY)
 #   5. Deploy frontend separately on Vercel (see README → Deploy without a VPS)
-#
-# Cost note: the AI service needs at least the Starter plan (~$7/mo) for
-# Whisper + sentence-transformer RAM. The API can run on Free (cold starts).
 
 services:
-  # ── AI microservice (Whisper + embeddings + Gemini) ──────────────────
+  # ── AI microservice ──────────────────────────────────────────────────
   - type: web
     name: dreamsignal-ai
     runtime: docker
-    plan: starter
+    plan: free
     region: oregon
     dockerfilePath: ./ai-service/Dockerfile
     dockerContext: .
@@ -27,6 +24,10 @@ services:
         sync: false
       - key: WHISPER_MODEL_SIZE
         value: base
+      - key: USE_HF_WHISPER
+        value: "true"
+      - key: USE_HF_EMBEDDINGS
+        value: "true"
       - key: PORT
         value: "8001"
 
@@ -42,18 +43,25 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: "10000"
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: GEMINI_API_KEY
         sync: false
+      - key: CLOUDINARY_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_SECRET
+        sync: false
       - key: AI_SERVICE_URL
         fromService:
           type: web
           name: dreamsignal-ai
           envVarKey: RENDER_EXTERNAL_URL
-      # Set after you deploy the Vercel frontend (your-app.vercel.app)
       - key: FRONTEND_URL
         sync: false
       - key: SENTRY_DSN
