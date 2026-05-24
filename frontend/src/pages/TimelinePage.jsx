@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { dreamsAPI } from '../api/api';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import EmotionStamp from '../components/EmotionStamp';
 import MoodHeatmap from '../components/MoodHeatmap';
@@ -127,6 +128,7 @@ const FilmFrame = ({ dream, index }) => {
 };
 
 const TimelinePage = () => {
+  const { user } = useAuth();
   const toast = useToast();
   const [dreams,        setDreams]        = useState([]);
   const [heatmapDreams, setHeatmapDreams] = useState([]);
@@ -305,12 +307,41 @@ const TimelinePage = () => {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="dossier-card" style={{ padding: '64px', textAlign: 'center' }}>
-          <div className="case-label" style={{ marginBottom: '12px' }}>NO CASES ON FILE</div>
-          <p style={{ fontFamily: '"Courier Prime", monospace', fontSize: '13px', color: 'var(--silver)', marginBottom: '24px', lineHeight: 1.9 }}>
-            The archive is empty. Begin filing case reports to populate this sheet.
-          </p>
-          <Link to="/record" className="btn-stamp btn-stamp-red">▶ FILE NEW REPORT</Link>
+        <div className="dossier-card stacked-paper" style={{ padding: '64px', position: 'relative', overflow: 'hidden', border: '1px dashed rgba(61, 53, 40, 0.4)', textAlign: 'center' }}>
+          {/* Rubber Stamp */}
+          <div style={{
+            position: 'absolute',
+            top: '24px',
+            right: '24px',
+            border: '3px solid var(--stamp-red)',
+            color: 'var(--stamp-red)',
+            fontFamily: '"Share Tech Mono", monospace',
+            fontSize: '11px',
+            padding: '6px 12px',
+            transform: 'rotate(12deg)',
+            opacity: 0.85,
+            fontWeight: 'bold',
+            letterSpacing: '0.15em',
+            boxShadow: 'inset 0 0 0 1px var(--stamp-red)',
+          }}>
+            NO EVIDENCE FILED
+          </div>
+          
+          <div className="case-label" style={{ marginBottom: '20px', letterSpacing: '0.2em' }}>NO CASES ON RECORD</div>
+          
+          {/* Blank dossier mockup */}
+          <div style={{ textAlign: 'left', fontFamily: '"Courier Prime", monospace', fontSize: '12px', color: 'var(--ink-faded)', maxWidth: '340px', margin: '0 auto 32px' }}>
+            <div style={{ marginBottom: '12px' }}>CASE ID: <span style={{ borderBottom: '1px dashed var(--silver)', width: '180px', display: 'inline-block' }}></span></div>
+            <div style={{ marginBottom: '12px' }}>DATE: <span style={{ borderBottom: '1px dashed var(--silver)', width: '180px', display: 'inline-block' }}>-- / -- / ----</span></div>
+            <div style={{ marginBottom: '12px' }}>INVESTIGATOR: <span style={{ borderBottom: '1px dashed var(--silver)', width: '150px', display: 'inline-block' }}>{user?.username?.toUpperCase() || 'UNKNOWN'}</span></div>
+            <div style={{ marginBottom: '18px' }}>TRANSCRIPTION SYNOPSIS:</div>
+            <div style={{ borderBottom: '1px dashed var(--silver)', height: '24px', opacity: 0.5 }}></div>
+            <div style={{ borderBottom: '1px dashed var(--silver)', height: '24px', opacity: 0.5 }}></div>
+          </div>
+
+          <Link to="/record" className="btn-stamp btn-stamp-red" style={{ display: 'inline-flex' }}>
+            ▶ FILE NEW REPORT
+          </Link>
         </div>
       ) : (
         <div style={{

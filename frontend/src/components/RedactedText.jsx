@@ -30,6 +30,8 @@ const RedactedText = ({
   text = '',
   revealOnHover = true,
   className = '',
+  style = {},
+  ...props
 }) => {
   const [revealed, setRevealed] = useState(false);
   const tokens = useMemo(() => buildRedacted(text), [text]);
@@ -40,7 +42,8 @@ const RedactedText = ({
       onMouseEnter={() => revealOnHover && setRevealed(true)}
       onMouseLeave={() => revealOnHover && setRevealed(false)}
       aria-label={text}
-      style={{ cursor: revealOnHover ? 'pointer' : 'default' }}
+      style={{ cursor: revealOnHover ? 'pointer' : 'default', ...style }}
+      {...props}
     >
       {tokens.map((tok, i) => {
         if (tok.type === 'space') return <span key={i}>{tok.value}</span>;

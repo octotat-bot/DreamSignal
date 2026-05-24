@@ -6,6 +6,39 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ProcessingStamps from '../components/ProcessingStamps';
 import CoffeeRing from '../components/CoffeeRing';
 
+// Web Audio API Typewriter Click Sound Synthesizer
+let typewriterCtx = null;
+const playTypewriterClick = () => {
+  try {
+    if (!typewriterCtx) {
+      typewriterCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (typewriterCtx.state === 'suspended') {
+      typewriterCtx.resume();
+    }
+
+    const osc = typewriterCtx.createOscillator();
+    const gain = typewriterCtx.createGain();
+
+    osc.type = 'triangle';
+    const now = typewriterCtx.currentTime;
+    const pitch = 1100 + Math.random() * 400; // Slight random pitch variation
+    osc.frequency.setValueAtTime(pitch, now);
+    osc.frequency.exponentialRampToValueAtTime(120, now + 0.035);
+
+    gain.gain.setValueAtTime(0.02, now); // quiet click sound
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+
+    osc.connect(gain);
+    gain.connect(typewriterCtx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.04);
+  } catch (err) {
+    // Browser audio context blocked or not supported
+  }
+};
+
 const CanvasWaveform = ({ stream }) => {
   const canvasRef    = useRef(null);
   const animationRef = useRef(null);
@@ -547,7 +580,10 @@ const RecordPage = () => {
               <motion.div key="text" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <textarea
                   value={transcript}
-                  onChange={e => setTranscript(e.target.value)}
+                  onChange={e => {
+                    setTranscript(e.target.value);
+                    playTypewriterClick();
+                  }}
                   className="lined-paper"
                   placeholder="Begin transcription. Details matter. Note persons, objects, environments, and emotional states."
                   rows={10}

@@ -132,6 +132,14 @@ const DetailPage = () => {
     color: emotionBarColor[e.label] || '#8a8070',
   }));
 
+  const getClearanceLevel = () => {
+    if (dream.isNightmare) return { label: 'TOP SECRET', color: 'rgba(139, 26, 26, 0.04)', size: 'clamp(3rem, 12vw, 7.5rem)', border: '10px solid rgba(139, 26, 26, 0.04)' };
+    if (dream.isRecurring) return { label: 'SECRET', color: 'rgba(26, 58, 92, 0.04)', size: 'clamp(2.5rem, 10vw, 6rem)', border: '8px solid rgba(26, 58, 92, 0.04)' };
+    if (dream.isLucid) return { label: 'CONFIDENTIAL', color: 'rgba(184, 134, 11, 0.04)', size: 'clamp(2rem, 8vw, 5rem)', border: '7px solid rgba(184, 134, 11, 0.04)' };
+    return { label: 'UNCLASSIFIED', color: 'rgba(110, 100, 82, 0.035)', size: 'clamp(1.5rem, 6vw, 4rem)', border: '5px solid rgba(110, 100, 82, 0.035)' };
+  };
+  const clearance = getClearanceLevel();
+
   return (
     <motion.div
       initial={{ filter: 'brightness(0) sepia(1)', opacity: 0 }}
@@ -150,6 +158,30 @@ const DetailPage = () => {
         pointerEvents: 'none',
         zIndex: 0,
       }} />
+
+      {/* Clearance Watermark */}
+      <div style={{
+        position: 'absolute',
+        top: '30%',
+        left: '50%',
+        transform: 'translate(-50%, -50%) rotate(-25deg)',
+        fontFamily: '"Share Tech Mono", monospace',
+        fontSize: clearance.size,
+        color: clearance.color,
+        border: clearance.border,
+        padding: '16px 36px',
+        borderRadius: '4px',
+        letterSpacing: '0.22em',
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        pointerEvents: 'none',
+        zIndex: 0,
+        userSelect: 'none',
+        textAlign: 'center',
+        whiteSpace: 'nowrap',
+      }}>
+        {clearance.label}
+      </div>
 
       <CoffeeRing style={{ top: '60px', right: '20px', zIndex: 1 }} />
 
@@ -172,10 +204,10 @@ const DetailPage = () => {
               <div className="case-label" style={{ marginTop: '12px', marginBottom: '8px' }}>{caseId}</div>
               <h1 style={{
                 fontFamily: '"Special Elite", serif',
-                fontSize: 'clamp(1.6rem, 4vw, 2.6rem)',
+                fontSize: 'clamp(2.2rem, 5vw, 3.5rem)',
                 color: 'var(--ink)',
                 margin: 0,
-                lineHeight: 1.2,
+                lineHeight: 1.1,
               }}>
                 {titleTyper.display}
                 {!titleTyper.done && <span className="tw-cursor">|</span>}

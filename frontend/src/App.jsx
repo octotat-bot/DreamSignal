@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -46,31 +46,54 @@ const RouteFallback = () => (
 
 const PUBLIC_PATHS = ['/', '/login', '/signup'];
 
-/* Darkroom film develop/overexpose page transition */
+/* Darkroom film develop/overexpose and torn-paper page transition */
 const pageVariants = {
-  initial: {
+  initial: (direction) => ({
+    clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)',
+    x: direction === 'backward' ? '-100%' : '0%',
     filter: 'brightness(0) sepia(1)',
     opacity: 0,
-  },
+  }),
   animate: {
+    clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)',
+    x: '0%',
     filter: 'brightness(1) sepia(0.08)',
     opacity: 1,
     transition: { duration: 1.2, ease: [0.16, 1, 0.3, 1] },
   },
-  exit: {
-    filter: 'brightness(3)',
-    opacity: 0,
-    transition: { duration: 0.45, ease: 'easeIn' },
-  },
+  exit: (direction) => ({
+    clipPath: direction === 'forward'
+      ? [
+          'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)',
+          'polygon(0% 0%, 50% 0%, 45% 15%, 55% 30%, 40% 50%, 58% 70%, 45% 85%, 50% 100%, 0% 100%)',
+          'polygon(0% 0%, 0% 0%, 0% 15%, 0% 30%, 0% 50%, 0% 70%, 0% 85%, 0% 100%, 0% 100%)'
+        ]
+      : 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)',
+    x: direction === 'forward' ? '-40%' : '100%',
+    rotate: direction === 'forward' ? -4 : 0,
+    filter: direction === 'forward' ? 'brightness(1) sepia(0.08)' : 'brightness(3)',
+    opacity: direction === 'forward' ? 0.9 : 0,
+    transition: {
+      duration: 1.2,
+      ease: [0.16, 1, 0.3, 1],
+      clipPath: { duration: 0.9, times: [0, 0.45, 1], ease: 'easeInOut' }
+    },
+  }),
 };
 
-const PageWrapper = ({ children }) => (
+const PageWrapper = ({ children, direction }) => (
   <motion.div
+    custom={direction}
     variants={pageVariants}
     initial="initial"
     animate="animate"
     exit="exit"
-    style={{ width: '100%' }}
+    style={{
+      width: '100%',
+      position: 'relative',
+      transformOrigin: 'left bottom',
+      zIndex: 1,
+    }}
   >
     {children}
   </motion.div>
@@ -80,6 +103,28 @@ const AppContent = () => {
   const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
   const isPublicPage = PUBLIC_PATHS.includes(location.pathname);
+
+  // History tracking to detect navigation direction (forward vs backward)
+  const [historyStack, setHistoryStack] = useState([location.pathname]);
+  const [direction, setDirection] = useState('forward');
+
+  useEffect(() => {
+    setHistoryStack((prev) => {
+      const index = prev.indexOf(location.pathname);
+      if (index !== -1 && index < prev.length - 1) {
+        // We went back in history
+        setDirection('backward');
+        return prev.slice(0, index + 1);
+      } else {
+        // We went forward
+        setDirection('forward');
+        if (prev[prev.length - 1] === location.pathname) {
+          return prev;
+        }
+        return [...prev, location.pathname];
+      }
+    });
+  }, [location.pathname]);
 
   return (
     <div style={{
@@ -102,36 +147,26 @@ const AppContent = () => {
         flexDirection: 'column',
         paddingTop: isAuthenticated && !loading && !isPublicPage ? '56px' : '0',
       }}>
-        <AnimatePresence mode="wait">
-          <ErrorBoundary resetKey={location.pathname}>
-            <Suspense fallback={<RouteFallback />}>
-              <Routes location={location} key={location.pathname}>
-                <Route path="/"       element={<GuestRoute><PageWrapper><LandingPage /></PageWrapper></GuestRoute>} />
-                <Route path="/login"  element={<GuestRoute><PageWrapper><AuthPages  /></PageWrapper></GuestRoute>} />
-                <Route path="/signup" element={<GuestRoute><PageWrapper><AuthPages  /></PageWrapper></GuestRoute>} />
+        <AnimatePresence mode="popLayout">
+          <PageWrapper key={location.pathname} direction={direction}>
+            <ErrorBoundary resetKey={location.pathname}>
+              <Suspense fallback={<RouteFallback />}>
+                <Routes location={location}>
+                  <Route path="/"       element={<GuestRoute><LandingPage /></GuestRoute>} />
+                  <Route path="/login"  element={<GuestRoute><AuthPages /></GuestRoute>} />
+                  <Route path="/signup" element={<GuestRoute><AuthPages /></GuestRoute>} />
 
-                <Route path="/dashboard" element={
-                  <ProtectedRoute><PageWrapper><Dashboard /></PageWrapper></ProtectedRoute>
-                } />
-                <Route path="/record" element={
-                  <ProtectedRoute><PageWrapper><RecordPage /></PageWrapper></ProtectedRoute>
-                } />
-                <Route path="/dreams/:id" element={
-                  <ProtectedRoute><PageWrapper><DetailPage /></PageWrapper></ProtectedRoute>
-                } />
-                <Route path="/timeline" element={
-                  <ProtectedRoute><PageWrapper><TimelinePage /></PageWrapper></ProtectedRoute>
-                } />
-                <Route path="/analytics" element={
-                  <ProtectedRoute><PageWrapper><AnalyticsPage /></PageWrapper></ProtectedRoute>
-                } />
-                <Route path="/profile" element={
-                  <ProtectedRoute><PageWrapper><ProfilePage /></PageWrapper></ProtectedRoute>
-                } />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Suspense>
-          </ErrorBoundary>
+                  <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                  <Route path="/record"    element={<ProtectedRoute><RecordPage /></ProtectedRoute>} />
+                  <Route path="/dreams/:id" element={<ProtectedRoute><DetailPage /></ProtectedRoute>} />
+                  <Route path="/timeline"  element={<ProtectedRoute><TimelinePage /></ProtectedRoute>} />
+                  <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+                  <Route path="/profile"   element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
+            </ErrorBoundary>
+          </PageWrapper>
         </AnimatePresence>
       </main>
     </div>

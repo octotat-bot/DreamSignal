@@ -3,19 +3,40 @@ import { Link } from 'react-router-dom';
 import { analyticsAPI, dreamsAPI } from '../api/api';
 import { useToast } from '../context/ToastContext';
 import { motion } from 'framer-motion';
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
-  LineChart, Line, CartesianGrid, PieChart, Pie, Cell
-} from 'recharts';
 import CoffeeRing from '../components/CoffeeRing';
+import EmotionStamp from '../components/EmotionStamp';
 
-const SYMBOL_ROTS = [-3, 1.5, -1, 2.5, -2, 3, -1.5, 2, -3, 1];
+const makeCaseId = (index) => {
+  const suffixes = ['ALPHA','BETA','GAMMA','DELTA','EPSILON'];
+  return `CASE-${String(index).padStart(4,'0')}-${suffixes[index % 5]}`;
+};
+
+// Preset positions on our responsive 100 x 100 conspiracy board coordinate grid
+const SYMBOL_POSITIONS = [
+  { x: 14, y: 22 },
+  { x: 12, y: 50 },
+  { x: 15, y: 78 },
+  { x: 86, y: 22 },
+  { x: 88, y: 50 },
+  { x: 85, y: 78 },
+];
+
+const DREAM_POSITIONS = [
+  { x: 50, y: 16 },
+  { x: 36, y: 44 },
+  { x: 64, y: 38 },
+  { x: 44, y: 74 },
+  { x: 64, y: 76 },
+];
+
+const ROTATIONS = [-3, 2, -1, 3, -2, 4, -1.5, 2.5, -4, 1.5];
 
 const AnalyticsPage = () => {
   const toast = useToast();
   const [patterns,   setPatterns]   = useState(null);
   const [allDreams,  setAllDreams]  = useState([]);
   const [loading,    setLoading]    = useState(true);
+  const [selectedSymbol, setSelectedSymbol] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -27,16 +48,15 @@ const AnalyticsPage = () => {
         ]);
         setPatterns(p);
         setAllDreams(d.dreams || []);
-      } catch { toast.error('Failed to load signal analysis.'); }
-      finally { setLoading(false); }
+      } catch {
+        toast.error('Failed to load signal analysis.');
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, []);
 
-  // Build deduplicated cross-reference links from each dream's `relatedDreams`
-  // (populated by the embedding-similarity step in the AI service). Each pair
-  // is keyed by sorted IDs so A↔B and B↔A only show up once.
-  // NOTE: must stay above any early return — see Rules of Hooks.
   const relatedLinks = useMemo(() => {
     if (!allDreams.length) return [];
     const titleMap = new Map(
@@ -46,7 +66,6 @@ const AnalyticsPage = () => {
     const links = [];
     for (const d of allDreams) {
       const aId = String(d._id);
-      const aTitle = titleMap.get(aId) || 'Untitled';
       for (const r of d.relatedDreams || []) {
         const bId = r.dreamId ? String(r.dreamId) : null;
         if (!bId || bId === aId) continue;
@@ -56,7 +75,7 @@ const AnalyticsPage = () => {
         links.push({
           key: pairKey,
           aId,
-          aTitle,
+          aTitle: titleMap.get(aId) || 'Untitled',
           bId,
           bTitle: titleMap.get(bId) || r.title || 'Untitled',
           similarity: r.similarity || 0,
@@ -73,43 +92,51 @@ const AnalyticsPage = () => {
     </div>
   );
 
-  const emotionTrends  = patterns?.emotionTrends  || [];
-  const symbolFreq     = patterns?.symbolFrequency || [];
-  const totalDreams    = patterns?.totalDreams     || 0;
+  const emotionTrends = patterns?.emotionTrends || [];
+  const symbolFreq    = patterns?.symbolFrequency || [];
+  const totalDreams   = patterns?.totalDreams || 0;
 
-  // Derive dominant emotion: highest dreamCount, tiebreaker = highest averageScore.
-  // The backend stores `dominantEmotionHistory` (one entry per dream), but doesn't
-  // surface a single aggregate value — compute it client-side from emotionTrends.
   const dominantEmo = emotionTrends.length
     ? [...emotionTrends].sort((a, b) =>
         (b.dreamCount - a.dreamCount) || (b.averageScore - a.averageScore)
       )[0].label || 'N/A'
     : 'N/A';
 
-  // Frequency % for an emotion = dreams where it was detected / total dreams.
-  const emotionPct = (e) => (totalDreams > 0 ? (e.dreamCount / totalDreams) * 100 : 0);
+  // Take top 6 symbols and top 5 recent dreams for conspiracy board representation
+  const activeSymbols = symbolFreq.slice(0, 6);
+  const activeDreams  = allDreams.slice(0, 5);
 
-  // Build intensity over time from all dreams
-  const intensityData = allDreams.slice().reverse().map((d, i) => ({
-    name: `#${String(i + 1).padStart(2,'0')}`,
-    intensity: d.emotions?.reduce((max, e) => Math.max(max, e.score), 0) * 100 || 0,
-  }));
+  // Helper to verify connection between a dream and a symbol label
+  const isConnected = (dream, symbolLabel) => {
+    return (dream.symbols || []).some(s => s.label.toLowerCase() === symbolLabel.toLowerCase());
+  };
 
-  // Emotion pie (kept in case a pie panel is reintroduced)
-  const pieData = emotionTrends.map(e => ({ name: e.label, value: emotionPct(e) }));
-  const PIE_COLORS = ['#b8860b','#8b1a1a','#1a3a5c','#5c3a1a','#2a4a2a','#8a8070','#3d3528'];
+  // Helper to draw sagging string curves
+  const getSaggingPath = (p1, p2) => {
+    const midX = (p1.x + p2.x) / 2;
+    const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+    const sag = dist * 0.12; // Sag factor
+    const midY = (p1.y + p2.y) / 2 + sag;
+    return `M ${p1.x} ${p1.y} Q ${midX} ${midY} ${p2.x} ${p2.y}`;
+  };
+
+  const handleBoardClick = (e) => {
+    // Clear selection if clicking the corkboard backdrop directly
+    if (e.target.id === 'corkboard-canvas') {
+      setSelectedSymbol(null);
+    }
+  };
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px', position: 'relative' }}>
-
       <CoffeeRing style={{ top: '20px', right: '0' }} />
 
-      {/* Page header — rubber stamp style */}
+      {/* Page Header */}
       <div style={{ borderBottom: '2px solid var(--ink)', paddingBottom: '16px', marginBottom: '40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', justifycontent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <div className="case-label" style={{ marginBottom: '4px' }}>SUBCONSCIOUS PATTERN ANALYSIS</div>
-            <h1 style={{ fontFamily: '"Special Elite", serif', fontSize: '2rem', color: 'var(--ink)', margin: 0 }}>
+            <h1 style={{ fontFamily: '"Special Elite", serif', fontSize: '2.5rem', color: 'var(--ink)', margin: 0, lineHeight: 1.1 }}>
               Signal Research Report
             </h1>
           </div>
@@ -126,6 +153,7 @@ const AnalyticsPage = () => {
               letterSpacing: '0.15em',
               color: 'var(--stamp-blue)',
               boxShadow: 'inset 0 0 0 1px var(--stamp-blue)',
+              marginLeft: 'auto',
             }}
           >
             CLASSIFIED ANALYSIS
@@ -154,113 +182,280 @@ const AnalyticsPage = () => {
         ))}
       </div>
 
-      {/* Charts row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
-
-        {/* Emotion bar chart */}
-        <div className="dossier-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-            <div className="case-label">EMOTION FREQUENCY</div>
-            <div style={{ flex: 1, borderTop: '1px dashed rgba(61,53,40,0.3)' }} />
-          </div>
-          <div style={{ height: '200px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={emotionTrends.map(e => ({
-                name: (e.label || '').slice(0, 4).toUpperCase() || 'N/A',
-                pct: Math.round(emotionPct(e)),
-              }))}>
-                <XAxis dataKey="name" tick={{ fontFamily: '"Share Tech Mono"', fontSize: 9, fill: 'var(--ink-faded)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontFamily: '"Share Tech Mono"', fontSize: 9, fill: 'var(--ink-faded)' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--paper-dark)', border: '1px solid var(--ink-faded)', borderRadius: 0, fontFamily: '"Courier Prime"', fontSize: 12 }} />
-                <Bar dataKey="pct" fill="var(--fixer)" radius={0} barSize={20} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Intensity over time */}
-        <div className="dossier-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-            <div className="case-label">SIGNAL INTENSITY OVER TIME</div>
-            <div style={{ flex: 1, borderTop: '1px dashed rgba(61,53,40,0.3)' }} />
-          </div>
-          <div style={{ height: '200px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={intensityData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(61,53,40,0.15)" />
-                <XAxis dataKey="name" tick={{ fontFamily: '"Share Tech Mono"', fontSize: 9, fill: 'var(--ink-faded)' }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0,100]} tick={{ fontFamily: '"Share Tech Mono"', fontSize: 9, fill: 'var(--ink-faded)' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--paper-dark)', border: '1px solid var(--ink-faded)', borderRadius: 0, fontFamily: '"Courier Prime"', fontSize: 12 }} />
-                <Line type="monotone" dataKey="intensity" stroke="var(--fixer)" strokeWidth={2} dot={{ fill: 'var(--stamp-red)', r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      {/* ── CONSPIRACY BOARD SECTION ── */}
+      <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <span className="case-label" style={{ letterSpacing: '0.2em' }}>INVESTIGATION BOARD — SYMBOL LINKAGES</span>
+        <div style={{ flex: 1, borderTop: '1px dashed rgba(61,53,40,0.3)' }} />
+        {selectedSymbol && (
+          <button
+            onClick={() => setSelectedSymbol(null)}
+            className="btn-stamp"
+            style={{ fontSize: '9px', padding: '3px 10px', color: 'var(--stamp-red)' }}
+          >
+            RESET VIEW
+          </button>
+        )}
       </div>
 
-      {/* Symbol evidence grid */}
-      {symbolFreq.length > 0 && (
-        <div className="dossier-card" style={{ padding: '28px', marginBottom: '32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-            <motion.div
-              initial={{ scale: 2, rotate: '-8deg', opacity: 0 }}
-              animate={{ scale: 1, rotate: '2deg', opacity: 0.85 }}
-              transition={{ duration: 0.4, delay: 0.4 }}
-              style={{
-                border: '2px solid var(--stamp-red)',
-                borderRadius: '2px',
-                padding: '3px 10px',
-                fontFamily: '"Share Tech Mono", monospace',
-                fontSize: '0.6rem',
-                letterSpacing: '0.15em',
-                color: 'var(--stamp-red)',
-                boxShadow: 'inset 0 0 0 1px var(--stamp-red)',
-              }}
-            >
-              SYMBOL MAP
-            </motion.div>
-            <div style={{ flex: 1, borderTop: '1px dashed rgba(61,53,40,0.3)' }} />
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
-            {symbolFreq.slice(0, 20).map(({ label, count }, i) => {
-              const maxCount = symbolFreq[0]?.count || 1;
-              const scale    = 0.8 + (count / maxCount) * 0.7;
-              return (
-                <motion.div
-                  key={label}
-                  initial={{ scale: 2, rotate: '-6deg', opacity: 0 }}
-                  animate={{ scale, rotate: `${SYMBOL_ROTS[i % SYMBOL_ROTS.length]}deg`, opacity: 0.85 }}
-                  transition={{ duration: 0.4, delay: 0.5 + i * 0.05, ease: [0.175, 0.885, 0.32, 1.275] }}
+      {totalDreams === 0 ? (
+        <div className="dossier-card stacked-paper" style={{ padding: '80px', textAlign: 'center', marginBottom: '40px' }}>
+          <div className="case-label" style={{ marginBottom: '16px' }}>BOARD STANDBY</div>
+          <h3 style={{ fontFamily: '"Special Elite", serif', fontSize: '1.5rem', marginBottom: '12px' }}>
+            No Investigation Map Available
+          </h3>
+          <p style={{ fontFamily: '"Courier Prime", monospace', fontSize: '13px', color: 'var(--silver)', maxWidth: '440px', margin: '0 auto 24px', lineHeight: 1.8 }}>
+            Submit dream reports to build active connections. Connected symbols will appear as evidence nodes pinned by red string on the conspiracy board.
+          </p>
+          <Link to="/record" className="btn-stamp btn-stamp-red">
+            ▶ FILE NEW REPORT
+          </Link>
+        </div>
+      ) : (
+        <div
+          id="corkboard-canvas"
+          onClick={handleBoardClick}
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: '650px',
+            backgroundColor: '#1b140f',
+            backgroundImage: 'radial-gradient(#261d15 15%, transparent 16%), radial-gradient(#261d15 15%, transparent 16%)',
+            backgroundSize: '8px 8px',
+            backgroundPosition: '0 0, 4px 4px',
+            border: '12px solid #140d09',
+            boxShadow: 'inset 0 10px 40px rgba(0,0,0,0.95), 0 12px 28px rgba(0,0,0,0.4)',
+            overflow: 'hidden',
+            borderRadius: '2px',
+            marginBottom: '40px',
+            userSelect: 'none',
+          }}
+        >
+          {/* SVG Red Strings Overlay */}
+          <svg
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+              zIndex: 5,
+            }}
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+          >
+            {activeSymbols.map((symbol, sIdx) => {
+              const sPos = SYMBOL_POSITIONS[sIdx % SYMBOL_POSITIONS.length];
+              return activeDreams.map((dream, dIdx) => {
+                const dPos = DREAM_POSITIONS[dIdx % DREAM_POSITIONS.length];
+                const connected = isConnected(dream, symbol.label);
+
+                if (!connected) return null;
+
+                // Connection highlights when matching the selected symbol, or when nothing is selected
+                const isLineActive = !selectedSymbol || selectedSymbol.toLowerCase() === symbol.label.toLowerCase();
+
+                return (
+                  <motion.path
+                    key={`${symbol.label}-${dream._id}`}
+                    d={getSaggingPath(sPos, dPos)}
+                    fill="none"
+                    stroke="#a01a1a" // Thread blood-red
+                    strokeWidth={isLineActive ? 1.6 : 0.4}
+                    opacity={isLineActive ? 0.8 : 0.12}
+                    strokeDasharray={isLineActive ? "none" : "2,2"}
+                    style={{
+                      filter: isLineActive ? 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))' : 'none',
+                      transition: 'all 0.4s ease-in-out',
+                    }}
+                  />
+                );
+              });
+            })}
+          </svg>
+
+          {/* Symbol Pinned Evidence Nodes (Left & Right margins) */}
+          {activeSymbols.map((symbol, i) => {
+            const pos = SYMBOL_POSITIONS[i % SYMBOL_POSITIONS.length];
+            const isHighlighted = !selectedSymbol || selectedSymbol.toLowerCase() === symbol.label.toLowerCase();
+            const rotation = ROTATIONS[i % ROTATIONS.length];
+
+            return (
+              <motion.div
+                key={symbol.label}
+                onClick={() => setSelectedSymbol(prev => prev === symbol.label ? null : symbol.label)}
+                animate={{
+                  scale: isHighlighted ? 1 : 0.88,
+                  opacity: isHighlighted ? 1 : 0.28,
+                  filter: isHighlighted ? 'brightness(1)' : 'brightness(0.65)',
+                }}
+                transition={{ duration: 0.35, ease: 'easeInOut' }}
+                style={{
+                  position: 'absolute',
+                  left: `${pos.x}%`,
+                  top: `${pos.y}%`,
+                  transform: 'translate(-50%, -50%)',
+                  width: '135px',
+                  padding: '12px',
+                  backgroundColor: '#faf8f2',
+                  border: '1px solid #d4cbb8',
+                  boxShadow: isHighlighted ? '0 8px 18px rgba(0,0,0,0.5)' : '0 3px 6px rgba(0,0,0,0.3)',
+                  cursor: 'pointer',
+                  zIndex: isHighlighted ? 15 : 10,
+                  transformOrigin: 'center',
+                }}
+              >
+                {/* Red pushpin head at center top */}
+                <div style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  backgroundColor: '#c92a2a',
+                  border: '1.5px solid rgba(255,255,255,0.4)',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
+                  zIndex: 20,
+                }} />
+
+                {/* Handwritten Tag content */}
+                <div style={{
+                  fontFamily: '"Share Tech Mono", monospace',
+                  fontSize: '9px',
+                  color: 'var(--silver)',
+                  letterSpacing: '0.08em',
+                  marginBottom: '2px',
+                }}>
+                  SYMBOL NODE
+                </div>
+                <div style={{
+                  fontFamily: '"Special Elite", serif',
+                  fontSize: '1.05rem',
+                  color: '#1a1510',
+                  lineHeight: 1.1,
+                  textTransform: 'uppercase',
+                  margin: '4px 0',
+                }}>
+                  {symbol.label}
+                </div>
+                <div style={{
+                  fontFamily: '"Courier Prime", monospace',
+                  fontSize: '10px',
+                  color: '#8b1a1a',
+                  fontWeight: 'bold',
+                }}>
+                  STRENGTH: ×{symbol.count}
+                </div>
+              </motion.div>
+            );
+          })}
+
+          {/* Dream Pinned Evidence Cards (Center grid) */}
+          {activeDreams.map((dream, i) => {
+            const pos = DREAM_POSITIONS[i % DREAM_POSITIONS.length];
+            // Highlight a dream card if no symbol is selected OR if it contains the selected symbol
+            const isHighlighted = !selectedSymbol || isConnected(dream, selectedSymbol);
+            const rotation = ROTATIONS[(i + 4) % ROTATIONS.length];
+
+            return (
+              <motion.div
+                key={dream._id}
+                animate={{
+                  scale: isHighlighted ? 1 : 0.85,
+                  opacity: isHighlighted ? 1 : 0.25,
+                  filter: isHighlighted ? 'brightness(1)' : 'brightness(0.6)',
+                }}
+                transition={{ duration: 0.35, ease: 'easeInOut' }}
+                style={{
+                  position: 'absolute',
+                  left: `${pos.x}%`,
+                  top: `${pos.y}%`,
+                  transform: 'translate(-50%, -50%)',
+                  width: '165px',
+                  padding: '12px 14px',
+                  backgroundColor: 'var(--paper-dark)',
+                  border: '1.5px solid var(--ink-faded)',
+                  boxShadow: isHighlighted ? '0 10px 22px rgba(0,0,0,0.5)' : '0 4px 8px rgba(0,0,0,0.3)',
+                  zIndex: isHighlighted ? 14 : 9,
+                  transformOrigin: 'center',
+                }}
+              >
+                {/* Silver/Metallic pushpin head at center top */}
+                <div style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  backgroundColor: '#868e96',
+                  border: '1.5px solid rgba(255,255,255,0.4)',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
+                  zIndex: 20,
+                }} />
+
+                {/* Case File tag */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{
+                    fontFamily: '"Share Tech Mono", monospace',
+                    fontSize: '8px',
+                    color: 'var(--silver)',
+                    letterSpacing: '0.06em',
+                  }}>
+                    {makeCaseId(i + 1)}
+                  </span>
+                  <span style={{
+                    fontFamily: '"Share Tech Mono", monospace',
+                    fontSize: '8px',
+                    color: 'var(--silver)',
+                  }}>
+                    {new Date(dream.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
+                  </span>
+                </div>
+
+                {/* Link to Dream Detail */}
+                <Link
+                  to={`/dreams/${dream._id}`}
                   style={{
-                    border: '2px solid var(--stamp-blue)',
-                    borderRadius: '2px',
-                    padding: '4px 10px',
-                    boxShadow: 'inset 0 0 0 1px var(--stamp-blue)',
-                    display: 'inline-block',
-                    transformOrigin: 'center',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    display: 'block',
                   }}
                 >
-                  <div style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.6rem', letterSpacing: '0.1em', color: 'var(--stamp-blue)', textTransform: 'uppercase' }}>
-                    {label}
+                  <h4 style={{
+                    fontFamily: '"Special Elite", serif',
+                    fontSize: '0.85rem',
+                    color: 'var(--ink)',
+                    margin: '6px 0',
+                    lineHeight: 1.25,
+                    textDecoration: 'underline',
+                    textDecorationStyle: 'dotted',
+                  }}>
+                    {dream.analysis?.title || 'Untitled Case'}
+                  </h4>
+                </Link>
+
+                {/* Micro emotion badge inside card */}
+                {dream.dominantEmotion && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '6px' }}>
+                    <EmotionStamp emotion={dream.dominantEmotion} delay={0} size="sm" />
                   </div>
-                  <div style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.5rem', color: 'var(--silver)' }}>
-                    ×{count}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
-      {/* Cross-referenced case files — pairs of dreams that the embedding
-          similarity step linked at > 0.65 cosine similarity */}
+      {/* Cross-referenced case files */}
       {relatedLinks.length > 0 && (
         <div className="dossier-card" style={{ padding: '28px', marginBottom: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
             <div className="case-label">CROSS-REFERENCED CASE FILES</div>
             <div style={{ flex: 1, borderTop: '1px dashed rgba(61,53,40,0.3)' }} />
-            <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--silver)', letterSpacing: '0.1em' }}>
+            <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '9px', color: 'var(--silver)', letterSpacing: '0.1em' }}>
               {relatedLinks.length} LINK{relatedLinks.length === 1 ? '' : 'S'}
             </span>
           </div>
@@ -282,10 +477,10 @@ const AnalyticsPage = () => {
                 onMouseLeave={e => (e.currentTarget.style.opacity = '0.9')}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--silver)', letterSpacing: '0.1em' }}>
+                  <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '9px', color: 'var(--silver)', letterSpacing: '0.1em' }}>
                     LINK-{String(i + 1).padStart(3, '0')}
                   </span>
-                  <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '0.55rem', color: 'var(--fixer)', letterSpacing: '0.08em' }}>
+                  <span style={{ fontFamily: '"Share Tech Mono", monospace', fontSize: '9px', color: 'var(--fixer)', letterSpacing: '0.08em' }}>
                     {(link.similarity * 100).toFixed(0)}% MATCH
                   </span>
                 </div>
@@ -306,7 +501,7 @@ const AnalyticsPage = () => {
         borderTop: '1px dashed rgba(61,53,40,0.3)',
         paddingTop: '16px',
         fontFamily: '"Share Tech Mono", monospace',
-        fontSize: '0.55rem',
+        fontSize: '9px',
         color: 'var(--silver)',
         letterSpacing: '0.1em',
         display: 'flex',

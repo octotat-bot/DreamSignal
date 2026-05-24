@@ -6,6 +6,7 @@ import { dreamsAPI, analyticsAPI } from '../api/api';
 import { motion } from 'framer-motion';
 import CoffeeRing from '../components/CoffeeRing';
 import EmotionStamp from '../components/EmotionStamp';
+import RedactedText from '../components/RedactedText';
 
 const makeCaseId = (index) => {
   const suffixes = ['ALPHA','BETA','GAMMA','DELTA','EPSILON'];
@@ -270,12 +271,39 @@ const Dashboard = () => {
           </div>
 
           {recentDreams.length === 0 ? (
-            <div className="dossier-card" style={{ padding: '48px', textAlign: 'center' }}>
-              <div className="case-label" style={{ marginBottom: '12px' }}>NO FILES ON RECORD</div>
-              <p style={{ fontFamily: '"Courier Prime", monospace', fontSize: '13px', color: 'var(--ink-faded)', marginBottom: '24px', lineHeight: 1.9 }}>
-                Begin documenting your subconscious activity to populate the archive.
-              </p>
-              <Link to="/record" className="btn-stamp btn-stamp-red">
+            <div className="dossier-card stacked-paper" style={{ padding: '48px', position: 'relative', overflow: 'hidden', border: '1px dashed rgba(61, 53, 40, 0.4)', textAlign: 'center' }}>
+              {/* Rubber Stamp */}
+              <div style={{
+                position: 'absolute',
+                top: '24px',
+                right: '24px',
+                border: '3px solid var(--stamp-red)',
+                color: 'var(--stamp-red)',
+                fontFamily: '"Share Tech Mono", monospace',
+                fontSize: '11px',
+                padding: '6px 12px',
+                transform: 'rotate(12deg)',
+                opacity: 0.85,
+                fontWeight: 'bold',
+                letterSpacing: '0.15em',
+                boxShadow: 'inset 0 0 0 1px var(--stamp-red)',
+              }}>
+                NO EVIDENCE FILED
+              </div>
+              
+              <div className="case-label" style={{ marginBottom: '20px', letterSpacing: '0.2em' }}>NO FILES ON RECORD</div>
+              
+              {/* Blank dossier mockup */}
+              <div style={{ textAlign: 'left', fontFamily: '"Courier Prime", monospace', fontSize: '12px', color: 'var(--ink-faded)', maxWidth: '340px', margin: '0 auto 32px' }}>
+                <div style={{ marginBottom: '12px' }}>CASE ID: <span style={{ borderBottom: '1px dashed var(--silver)', width: '180px', display: 'inline-block' }}></span></div>
+                <div style={{ marginBottom: '12px' }}>DATE: <span style={{ borderBottom: '1px dashed var(--silver)', width: '180px', display: 'inline-block' }}>-- / -- / ----</span></div>
+                <div style={{ marginBottom: '12px' }}>INVESTIGATOR: <span style={{ borderBottom: '1px dashed var(--silver)', width: '150px', display: 'inline-block' }}>{user?.username?.toUpperCase()}</span></div>
+                <div style={{ marginBottom: '18px' }}>TRANSCRIPTION SYNOPSIS:</div>
+                <div style={{ borderBottom: '1px dashed var(--silver)', height: '24px', opacity: 0.5 }}></div>
+                <div style={{ borderBottom: '1px dashed var(--silver)', height: '24px', opacity: 0.5 }}></div>
+              </div>
+
+              <Link to="/record" className="btn-stamp btn-stamp-red" style={{ display: 'inline-flex' }}>
                 ▶ OPEN NEW FILE
               </Link>
             </div>
@@ -312,16 +340,17 @@ const Dashboard = () => {
 
                         {/* Redacted transcript */}
                         <div style={{ position: 'relative' }}>
-                          <div className="redact-bar" style={{ width: '70%', height: '1.2em', marginBottom: '4px' }} />
-                          <p style={{
-                            fontFamily: '"Courier Prime", monospace',
-                            fontSize: '12px',
-                            color: 'var(--ink-faded)',
-                            lineHeight: 1.7,
-                            margin: 0,
-                          }}>
-                            {(dream.analysis?.summary || dream.rawTranscript || '').slice(0, 100)}...
-                          </p>
+                          <RedactedText
+                            text={(dream.analysis?.summary || dream.rawTranscript || '').slice(0, 100) + '...'}
+                            revealOnHover={true}
+                            style={{
+                              fontFamily: '"Courier Prime", monospace',
+                              fontSize: '12px',
+                              color: 'var(--ink-faded)',
+                              lineHeight: 1.7,
+                              display: 'block',
+                            }}
+                          />
                         </div>
                       </div>
 
