@@ -38,34 +38,21 @@ const STEPS = [
   },
 ];
 
-const DarkroomWalkthrough = () => {
-  const location = useLocation();
-
-  // Only render on /dashboard
-  if (location.pathname !== '/dashboard') return null;
-
-  // Check localStorage once
-  if (typeof window !== 'undefined' && localStorage.getItem(TOUR_KEY)) return null;
-
-  return <WalkthroughOverlay />;
+const DarkroomWalkthrough = ({ onComplete }) => {
+  return <WalkthroughOverlay onComplete={onComplete} />;
 };
 
-const WalkthroughOverlay = () => {
-  const [step,   setStep]   = useState(0);
-  const [rect,   setRect]   = useState(null);
-  const [done,   setDone]   = useState(false);
-  const [ready,  setReady]  = useState(false);
+const WalkthroughOverlay = ({ onComplete }) => {
+  const [step,    setStep]    = useState(0);
+  const [rect,    setRect]    = useState(null);
+  const [started, setStarted] = useState(false);
 
-  // Wait for the cinematic loader to finish
+  // Wait for the dashboard underneath to fully paint before trying to measure elements
   useEffect(() => {
-    const checkCinematic = () => {
-      if (sessionStorage.getItem('cinematic_played') === 'true') {
-        setReady(true);
-      } else {
-        setTimeout(checkCinematic, 500);
-      }
-    };
-    checkCinematic();
+    const timer = setTimeout(() => {
+      setStarted(true);
+    }, 500);
+    return () => clearTimeout(timer);
   }, []);
 
   const currentStep = STEPS[step];
@@ -89,8 +76,7 @@ const WalkthroughOverlay = () => {
   }, [computeRect]);
 
   const complete = () => {
-    localStorage.setItem(TOUR_KEY, '1');
-    setDone(true);
+    if (onComplete) onComplete();
   };
 
   const next = () => {
@@ -98,8 +84,7 @@ const WalkthroughOverlay = () => {
     else complete();
   };
 
-  if (done) return null;
-  if (!ready) return null;
+  if (!started) return null;
 
   // Spotlight cutout via box-shadow — punches a hole through the overlay
   const spotlight = rect

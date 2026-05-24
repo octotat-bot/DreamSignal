@@ -6,7 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import GuestRoute from './components/GuestRoute';
 import Navbar from './components/Navbar';
 import DetectiveCursor from './components/DetectiveCursor';
-import DarkroomWalkthrough from './components/DarkroomWalkthrough';
+import FirstTimeExperience from './components/FirstTimeExperience';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -143,9 +143,6 @@ const AppContent = () => {
       {/* Detective loupe cursor — replaces default OS cursor on targeted elements */}
       <DetectiveCursor />
 
-      {/* First-time guided tour — only renders on /dashboard, once per device */}
-      <DarkroomWalkthrough />
-
       {isAuthenticated && !loading && <Navbar />}
 
       <main id="main-content" tabIndex={-1} style={{
@@ -164,7 +161,7 @@ const AppContent = () => {
                   <Route path="/login"  element={<GuestRoute><AuthPages /></GuestRoute>} />
                   <Route path="/signup" element={<GuestRoute><AuthPages /></GuestRoute>} />
 
-                  <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                  <Route path="/dashboard" element={<ProtectedRoute><><Dashboard /><FirstTimeExperience /></></ProtectedRoute>} />
                   <Route path="/record"    element={<ProtectedRoute><RecordPage /></ProtectedRoute>} />
                   <Route path="/dreams/:id" element={<ProtectedRoute><DetailPage /></ProtectedRoute>} />
                   <Route path="/timeline"  element={<ProtectedRoute><TimelinePage /></ProtectedRoute>} />

@@ -50,6 +50,9 @@ export const AuthProvider = ({ children }) => {
     try {
       const data = await authAPI.signup({ username, email, password });
       localStorage.setItem('dream_token', data.token);
+      if (data.isNewUser) {
+        localStorage.setItem('dreamsignal_first_visit', '1');
+      }
       setUser(data.user);
       setIsAuthenticated(true);
       return data.user;

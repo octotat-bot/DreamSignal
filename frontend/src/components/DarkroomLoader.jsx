@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 
-const DarkroomLoader = ({ onSkip, maxDuration = 8000 }) => {
+const DarkroomLoader = ({ onComplete, maxDuration = 6200 }) => {
   const [dots, setDots] = useState('');
 
   useEffect(() => {
@@ -12,14 +12,14 @@ const DarkroomLoader = ({ onSkip, maxDuration = 8000 }) => {
 
     // Auto-skip/complete after maxDuration
     const timeout = setTimeout(() => {
-      if (onSkip) onSkip();
+      if (onComplete) onComplete();
     }, maxDuration);
 
     return () => {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, [onSkip, maxDuration]);
+  }, [onComplete, maxDuration]);
 
   return (
     <div style={{
@@ -194,9 +194,9 @@ const DarkroomLoader = ({ onSkip, maxDuration = 8000 }) => {
       </div>
 
       {/* Skip button in bottom corner */}
-      {onSkip && (
+      {onComplete && (
         <button
-          onClick={onSkip}
+          onClick={onComplete}
           className="btn-stamp btn-stamp-ink"
           style={{
             position: 'absolute',

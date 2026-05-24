@@ -49,6 +49,7 @@ const signup = async (req, res, next) => {
 
     return res.status(201).json({
       token,
+      isNewUser: true,
       user: {
         id: user._id,
         username: user.username,
@@ -87,6 +88,7 @@ const login = async (req, res, next) => {
 
     return res.json({
       token,
+      isNewUser: false,
       user: {
         id: user._id,
         username: user.username,
