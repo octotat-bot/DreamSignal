@@ -165,7 +165,7 @@ const WalkthroughOverlay = ({ onComplete }) => {
           pointerEvents:   'all',
           zIndex:          100001,
           width:           '300px',
-          backgroundColor: 'var(--paper-dark, #1a1410)',
+          backgroundColor: 'var(--ink, #1a1510)',
           border:          '1px solid rgba(184,134,11,0.45)',
           borderTop:       '3px solid var(--fixer, #b8860b)',
           padding:         '22px 24px 20px',
