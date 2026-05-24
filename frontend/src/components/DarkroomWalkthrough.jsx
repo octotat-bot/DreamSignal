@@ -54,6 +54,19 @@ const WalkthroughOverlay = () => {
   const [step,   setStep]   = useState(0);
   const [rect,   setRect]   = useState(null);
   const [done,   setDone]   = useState(false);
+  const [ready,  setReady]  = useState(false);
+
+  // Wait for the cinematic loader to finish
+  useEffect(() => {
+    const checkCinematic = () => {
+      if (sessionStorage.getItem('cinematic_played') === 'true') {
+        setReady(true);
+      } else {
+        setTimeout(checkCinematic, 500);
+      }
+    };
+    checkCinematic();
+  }, []);
 
   const currentStep = STEPS[step];
 
@@ -86,6 +99,7 @@ const WalkthroughOverlay = () => {
   };
 
   if (done) return null;
+  if (!ready) return null;
 
   // Spotlight cutout via box-shadow — punches a hole through the overlay
   const spotlight = rect

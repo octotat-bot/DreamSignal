@@ -26,7 +26,7 @@ const DarkroomLoader = ({ onSkip, maxDuration = 8000 }) => {
       position: 'fixed',
       inset: 0,
       backgroundColor: '#0a0a08',
-      zIndex: 9999,
+      zIndex: 200000,
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
