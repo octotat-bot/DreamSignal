@@ -101,6 +101,7 @@ const RecordPage = () => {
   const [elapsed,    setElapsed]    = useState(0);
   const [transcript, setTranscript] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [isPaused,   setIsPaused]   = useState(false);
   const [dreamId,    setDreamId]    = useState(null);
   const [pollStatus, setPollStatus] = useState(null);
   const [aiReady,    setAiReady]    = useState(true);
@@ -156,13 +157,13 @@ const RecordPage = () => {
 
   /* ── Timer ── */
   useEffect(() => {
-    if (recording) {
+    if (recording && !isPaused) {
       timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
     } else {
       clearInterval(timerRef.current);
     }
     return () => clearInterval(timerRef.current);
-  }, [recording]);
+  }, [recording, isPaused]);
 
   /* Revoke blob preview URLs when the take changes or the page unmounts. */
   useEffect(() => {
@@ -341,6 +342,19 @@ const RecordPage = () => {
     if (!mediaRef.current || mediaRef.current.state === 'inactive') return;
     mediaRef.current.stop();
     setRecording(false);
+    setIsPaused(false);
+  };
+
+  const pauseRecording = () => {
+    if (!mediaRef.current || mediaRef.current.state !== 'recording') return;
+    mediaRef.current.pause();
+    setIsPaused(true);
+  };
+
+  const resumeRecording = () => {
+    if (!mediaRef.current || mediaRef.current.state !== 'paused') return;
+    mediaRef.current.resume();
+    setIsPaused(false);
   };
 
   const discardRecording = () => {
@@ -351,6 +365,7 @@ const RecordPage = () => {
     setAudioBlob(null);
     setPreviewUrl(null);
     setElapsed(0);
+    setIsPaused(false);
   };
 
   /* ── Submit ── */
@@ -537,10 +552,10 @@ const RecordPage = () => {
                 </div>
 
                 {/* Record button */}
-                <div style={{ marginBottom: '20px' }}>
+                <div style={{ marginBottom: '20px', display: 'flex', gap: '16px', justifyContent: 'center', alignItems: 'center' }}>
                   <button
                     onClick={recording ? stopRecording : startRecording}
-                    className={recording ? 'safelight-glow' : ''}
+                    className={recording && !isPaused ? 'safelight-glow' : ''}
                     style={{
                       width: '80px',
                       height: '80px',
@@ -552,7 +567,6 @@ const RecordPage = () => {
                       alignItems: 'center',
                       justifyContent: 'center',
                       transition: 'all 0.3s',
-                      margin: '0 auto',
                     }}
                   >
                     <div style={{
@@ -563,6 +577,42 @@ const RecordPage = () => {
                       transition: 'all 0.3s',
                     }} />
                   </button>
+
+                  {recording && (
+                    <button
+                      onClick={isPaused ? resumeRecording : pauseRecording}
+                      style={{
+                        width: '50px',
+                        height: '50px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--paper-dark)',
+                        border: '2px solid var(--fixer)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                      title={isPaused ? "Resume recording" : "Pause recording"}
+                    >
+                      {isPaused ? (
+                        // Play icon
+                        <div style={{
+                          width: 0,
+                          height: 0,
+                          borderTop: '8px solid transparent',
+                          borderBottom: '8px solid transparent',
+                          borderLeft: '14px solid var(--fixer)',
+                          marginLeft: '4px'
+                        }} />
+                      ) : (
+                        // Pause icon
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <div style={{ width: '4px', height: '16px', backgroundColor: 'var(--fixer)' }} />
+                          <div style={{ width: '4px', height: '16px', backgroundColor: 'var(--fixer)' }} />
+                        </div>
+                      )}
+                    </button>
+                  )}
                 </div>
 
                 {/* Timer */}
@@ -576,7 +626,7 @@ const RecordPage = () => {
                   {fmtTime(elapsed)}
                 </div>
                 <div className="case-label" style={{ marginBottom: '16px' }}>
-                  {recording ? '● RECORDING EXPOSURE' : audioBlob ? '◆ TESTIMONY CAPTURED' : '○ STANDBY'}
+                  {recording ? (isPaused ? '❚❚ EXPOSURE PAUSED' : '● RECORDING EXPOSURE') : audioBlob ? '◆ TESTIMONY CAPTURED' : '○ STANDBY'}
                 </div>
 
                 {stream && <CanvasWaveform stream={stream} />}
