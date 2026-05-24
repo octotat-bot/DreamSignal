@@ -343,6 +343,16 @@ const RecordPage = () => {
     setRecording(false);
   };
 
+  const discardRecording = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setAudioBlob(null);
+    setPreviewUrl(null);
+    setElapsed(0);
+  };
+
   /* ── Submit ── */
   const handleSubmit = async () => {
     if (tab === 'text') {
@@ -572,8 +582,25 @@ const RecordPage = () => {
                 {stream && <CanvasWaveform stream={stream} />}
 
                 {audioBlob && previewUrl && !recording && (
-                  <div style={{ marginTop: '16px' }}>
+                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
                     <audio controls src={previewUrl} style={{ width: '100%' }} />
+                    <button
+                      onClick={discardRecording}
+                      style={{
+                        padding: '6px 12px',
+                        fontFamily: '"Share Tech Mono", monospace',
+                        fontSize: '0.65rem',
+                        letterSpacing: '0.1em',
+                        backgroundColor: 'transparent',
+                        color: 'var(--stamp-red)',
+                        border: '1px solid var(--stamp-red)',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      ✕ Discard & Re-record
+                    </button>
                   </div>
                 )}
               </motion.div>
