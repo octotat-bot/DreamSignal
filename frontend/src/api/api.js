@@ -7,10 +7,16 @@ import {
 
 let API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
 
-// Defensive check: if the user pasted the raw Render URL in Vercel env vars 
-// without the /api suffix, automatically append it to prevent 404s.
-if (API_BASE_URL.startsWith('http') && !API_BASE_URL.endsWith('/api')) {
-  API_BASE_URL = API_BASE_URL.replace(/\/$/, '') + '/api';
+// Defensive check: no matter what URL the user pastes in Vercel (even if they
+// accidentally pasted the /health endpoint), we extract just the origin
+// and guarantee it ends with exactly '/api'.
+try {
+  if (API_BASE_URL.startsWith('http')) {
+    const parsedUrl = new URL(API_BASE_URL);
+    API_BASE_URL = `${parsedUrl.origin}/api`;
+  }
+} catch (e) {
+  // fallback if URL parsing fails
 }
 
 const api = axios.create({
