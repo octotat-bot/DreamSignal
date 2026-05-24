@@ -13,6 +13,9 @@ RUN cd backend && npm install --omit=dev --no-audit --no-fund
 
 # Shared API contracts — backend imports via `../../shared/contracts`.
 COPY shared/ ./shared/
+# Install zod inside shared so Node ESM resolution can find it when 
+# contracts.js is dynamically imported by the backend.
+RUN cd shared && npm install zod --no-audit --no-fund
 
 COPY backend/ ./backend/
 # Maintenance scripts (run as separate compose services, e.g. cleanup cron).
