@@ -86,8 +86,9 @@ async def health_check():
     use_hf_whisper = os.getenv("USE_HF_WHISPER", "false").lower() == "true"
     use_hf_embeddings = os.getenv("USE_HF_EMBEDDINGS", "false").lower() == "true"
 
-    whisper_loaded = False if use_hf_whisper else (hasattr(app.state, "whisper_service") and app.state.whisper_service is not None)
-    embedding_loaded = False if use_hf_embeddings else (hasattr(app.state, "embedding_service") and app.state.embedding_service is not None)
+    # HF mode is always "loaded" — the API is available without a local model.
+    whisper_loaded = True if use_hf_whisper else (hasattr(app.state, "whisper_service") and app.state.whisper_service is not None)
+    embedding_loaded = True if use_hf_embeddings else (hasattr(app.state, "embedding_service") and app.state.embedding_service is not None)
     
     return {
         "status": "ok",
