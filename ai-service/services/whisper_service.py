@@ -20,7 +20,7 @@ class WhisperService:
     def _transcribe_hf(self, file_path: str):
         api_key = os.getenv("HUGGINGFACE_API_KEY")
         headers = {"Authorization": f"Bearer {api_key}"}
-        url = "https://api-inference.huggingface.co/models/openai/whisper-base"
+        url = "https://router.huggingface.co/hf-inference/models/openai/whisper-base"
         
         with open(file_path, "rb") as f:
             data = f.read()

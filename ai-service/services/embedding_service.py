@@ -76,7 +76,7 @@ class EmbeddingService:
     def _generate_hf(self, text: str) -> List[float]:
         api_key = os.getenv("HUGGINGFACE_API_KEY")
         headers = {"Authorization": f"Bearer {api_key}"}
-        url = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
+        url = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2"
         
         for attempt in range(2):
             try:
