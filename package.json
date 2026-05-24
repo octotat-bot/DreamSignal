@@ -1,0 +1,9 @@
+{
+  "name": "dream-signal",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared"
+  ]
+}
