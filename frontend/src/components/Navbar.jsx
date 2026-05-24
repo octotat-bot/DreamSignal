@@ -15,7 +15,7 @@ const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const handleLogout = () => { logout(); navigate('/'); };
+  const handleLogout = () => { logout(); window.location.replace('/'); };
 
   return (
     <nav style={{

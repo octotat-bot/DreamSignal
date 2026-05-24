@@ -447,7 +447,7 @@ const ProfilePage = () => {
       await authAPI.deleteAccount({ password: closePassword });
       toast.success('Case file closed. Goodbye.');
       logout();
-      navigate('/', { replace: true });
+      window.location.replace('/');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to close file.');
       setClosing(false);
