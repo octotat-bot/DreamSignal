@@ -63,6 +63,6 @@ services:
           name: dreamsignal-ai
           envVarKey: RENDER_EXTERNAL_URL
       - key: FRONTEND_URL
-        sync: false
+        value: "https://dream-signal.vercel.app"
       - key: SENTRY_DSN
         sync: false
