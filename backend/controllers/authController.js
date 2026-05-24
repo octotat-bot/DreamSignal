@@ -5,6 +5,7 @@ const Dream = require('../models/Dream');
 const Pattern = require('../models/Pattern');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { deleteFromCloudinary } = require('../config/cloudinary');
 const rootLogger = require('../services/logger').child({ scope: 'authController' });
 
 // Helper to sign JWT token
@@ -54,6 +55,7 @@ const signup = async (req, res, next) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        avatar: user.avatar,
         createdAt: user.createdAt
       }
     });
@@ -90,7 +92,8 @@ const login = async (req, res, next) => {
       user: {
         id: user._id,
         username: user.username,
-        email: user.email
+        email: user.email,
+        avatar: user.avatar
       }
     });
 
@@ -114,6 +117,7 @@ const getMe = async (req, res, next) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        avatar: user.avatar,
         dreamCount: user.dreamCount,
         createdAt: user.createdAt
       }
@@ -182,6 +186,15 @@ const deleteAccount = async (req, res, next) => {
     if (!isMatch) return res.status(401).json({ message: 'Password is incorrect' });
 
     const log = rootLogger.child({ userId: String(user._id), requestId: req.id || null });
+
+    // Destroy Cloudinary avatar if present
+    if (user.avatarPublicId) {
+      try {
+        await deleteFromCloudinary(user.avatarPublicId);
+      } catch (err) {
+        log.warn({ err: err.message }, 'Failed to delete Cloudinary avatar during account deletion');
+      }
+    }
 
     // Sweep on-disk audio files first so a partial DB failure can't leave
     // orphaned binaries behind. The cleanup_storage script can mop up later

@@ -70,6 +70,18 @@ export const authAPI = {
     const response = await api.delete('/auth/me', { data: { password } });
     return response.data;
   },
+  uploadAvatar: async (file) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const response = await api.patch('/auth/me/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+  removeAvatar: async () => {
+    const response = await api.delete('/auth/me/avatar');
+    return response.data;
+  },
 };
 
 export const dreamsAPI = {

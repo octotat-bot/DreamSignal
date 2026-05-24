@@ -86,8 +86,44 @@ const Navbar = () => {
             letterSpacing: '0.1em',
             color: 'var(--ink-faded)',
             textDecoration: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
           }}
         >
+          {user?.avatar ? (
+            <img
+              src={user.avatar}
+              alt=""
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                border: '1.5px solid var(--ink)',
+                objectFit: 'cover',
+                filter: 'sepia(0.15)',
+              }}
+            />
+          ) : (
+            <span
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                border: '1.5px solid var(--ink)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: '"Special Elite", serif',
+                fontSize: '0.8rem',
+                color: 'var(--ink)',
+                backgroundColor: 'rgba(61,53,40,0.08)',
+                flexShrink: 0,
+              }}
+            >
+              {user?.username?.charAt(0)?.toUpperCase() || '?'}
+            </span>
+          )}
           SUBJECT: <span style={{
             color: 'var(--ink)',
             textTransform: 'uppercase',

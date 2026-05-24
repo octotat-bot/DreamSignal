@@ -73,6 +73,9 @@ export const AuthProvider = ({ children }) => {
     login,
     signup,
     logout,
+    updateAvatar: (avatarUrl) => {
+      setUser((prev) => (prev ? { ...prev, avatar: avatarUrl } : prev));
+    },
     refreshProfile: async () => {
       try {
         const data = await authAPI.getMe();

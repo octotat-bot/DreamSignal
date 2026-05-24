@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -117,8 +117,205 @@ const StatTile = ({ label, value, sub }) => (
   </div>
 );
 
+/* ── Avatar Component ── */
+const AvatarUpload = ({ avatar, username, onUploaded, onRemoved }) => {
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  const toast = useToast();
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5 MB.');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      const data = await authAPI.uploadAvatar(file);
+      onUploaded(data.avatar);
+      toast.success('Photograph attached to dossier.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to upload photograph.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemove = async (e) => {
+    e.stopPropagation();
+    try {
+      setUploading(true);
+      await authAPI.removeAvatar();
+      onRemoved();
+      toast.success('Photograph removed.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to remove photograph.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const initial = username?.charAt(0)?.toUpperCase() || '?';
+
+  return (
+    <div
+      style={{ position: 'relative', flexShrink: 0 }}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={handleFileChange}
+        style={{ display: 'none' }}
+        id="avatar-upload-input"
+      />
+
+      {/* Avatar circle */}
+      <div
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        style={{
+          width: '96px',
+          height: '96px',
+          borderRadius: '50%',
+          border: '2.5px solid var(--ink)',
+          overflow: 'hidden',
+          cursor: uploading ? 'wait' : 'pointer',
+          position: 'relative',
+          backgroundColor: 'rgba(61,53,40,0.06)',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+          transition: 'box-shadow 0.3s, border-color 0.3s',
+          ...(hovering && !uploading ? { borderColor: 'var(--stamp-blue)', boxShadow: '0 2px 18px rgba(0,0,0,0.25)' } : {}),
+        }}
+        title="Click to upload photograph"
+      >
+        {avatar ? (
+          <img
+            src={avatar}
+            alt="Subject photograph"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              filter: 'sepia(0.12) contrast(1.05)',
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: '"Special Elite", serif',
+              fontSize: '2.2rem',
+              color: 'var(--ink)',
+              opacity: 0.6,
+            }}
+          >
+            {initial}
+          </div>
+        )}
+
+        {/* Hover overlay */}
+        {hovering && !uploading && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(0,0,0,0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+            }}
+          >
+            <span
+              style={{
+                fontFamily: '"Share Tech Mono", monospace',
+                fontSize: '0.5rem',
+                color: '#fff',
+                letterSpacing: '0.1em',
+                textAlign: 'center',
+                lineHeight: 1.4,
+              }}
+            >
+              {avatar ? 'REPLACE\nPHOTO' : 'ATTACH\nPHOTO'}
+            </span>
+          </div>
+        )}
+
+        {/* Uploading spinner */}
+        {uploading && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+            }}
+          >
+            <div
+              style={{
+                width: '24px',
+                height: '24px',
+                border: '2px solid rgba(255,255,255,0.3)',
+                borderTopColor: '#fff',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Remove button */}
+      {avatar && hovering && !uploading && (
+        <button
+          onClick={handleRemove}
+          title="Remove photograph"
+          style={{
+            position: 'absolute',
+            top: '-4px',
+            right: '-4px',
+            width: '22px',
+            height: '22px',
+            borderRadius: '50%',
+            border: '1.5px solid var(--stamp-red)',
+            backgroundColor: 'var(--paper)',
+            color: 'var(--stamp-red)',
+            fontSize: '11px',
+            fontFamily: '"Share Tech Mono", monospace',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            lineHeight: 1,
+            padding: 0,
+            zIndex: 2,
+          }}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  );
+};
+
 const ProfilePage = () => {
-  const { user, logout, refreshProfile } = useAuth();
+  const { user, logout, refreshProfile, updateAvatar } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -290,20 +487,28 @@ const ProfilePage = () => {
           gap: '16px',
         }}
       >
-        <div>
-          <div className="case-label" style={{ marginBottom: '4px' }}>
-            INVESTIGATOR DOSSIER — CLEARANCE: LEVEL 3
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <AvatarUpload
+            avatar={user?.avatar}
+            username={user?.username}
+            onUploaded={(url) => updateAvatar(url)}
+            onRemoved={() => updateAvatar(null)}
+          />
+          <div>
+            <div className="case-label" style={{ marginBottom: '4px' }}>
+              INVESTIGATOR DOSSIER — CLEARANCE: LEVEL 3
+            </div>
+            <h1
+              style={{
+                fontFamily: '"Special Elite", serif',
+                fontSize: '2rem',
+                color: 'var(--ink)',
+                margin: 0,
+              }}
+            >
+              {user?.username || 'Unknown Subject'}
+            </h1>
           </div>
-          <h1
-            style={{
-              fontFamily: '"Special Elite", serif',
-              fontSize: '2rem',
-              color: 'var(--ink)',
-              margin: 0,
-            }}
-          >
-            {user?.username || 'Unknown Subject'}
-          </h1>
         </div>
 
         <motion.div
