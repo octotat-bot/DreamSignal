@@ -1,4 +1,5 @@
 require('dotenv').config();
+const axios = require('axios');
 
 // Sentry must be initialized before any other imports so its auto-
 // instrumentation can patch http/express at load time.
@@ -26,6 +27,17 @@ app.listen(PORT, () => {
   dreamQueue.init().then((queued) => {
     logger.info({ mode: queued ? 'queued' : 'inline' }, 'Dream pipeline runtime resolved');
   });
+
+  if (process.env.NODE_ENV === 'production') {
+    setInterval(async () => {
+      try {
+        await axios.get(`${process.env.AI_SERVICE_URL || 'http://localhost:8000'}/health`);
+        logger.info('AI service ping: ok');
+      } catch (err) {
+        logger.warn({ err: err.message }, 'AI service ping failed');
+      }
+    }, 14 * 60 * 1000); // every 14 minutes
+  }
 });
 
 const shutdown = async (signal) => {
