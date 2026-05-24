@@ -33,6 +33,19 @@ async def lifespan(app: FastAPI):
     whisper_model_size = os.getenv("WHISPER_MODEL_SIZE") or os.getenv("WHISPER_MODEL", "base")
     embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
+    use_hf_whisper = os.getenv("USE_HF_WHISPER", "false").lower() == "true"
+    use_hf_embeddings = os.getenv("USE_HF_EMBEDDINGS", "false").lower() == "true"
+
+    if use_hf_whisper:
+        print("Whisper: using HuggingFace Inference API")
+    else:
+        print("Whisper: loaded locally (base model)")
+
+    if use_hf_embeddings:
+        print("Embeddings: using HuggingFace Inference API")
+    else:
+        print("Embeddings: loaded locally (all-MiniLM-L6-v2)")
+
     app.state.whisper_service = WhisperService(model_size=whisper_model_size)
     app.state.embedding_service = EmbeddingService(model_name=embedding_model_name)
     # Emotion + symbol classifiers now run locally — share the embedder so
@@ -70,12 +83,18 @@ app.include_router(analyze.router, tags=["Dream Analysis"])
 
 @app.get("/health")
 async def health_check():
-    whisper_loaded = hasattr(app.state, "whisper_service") and app.state.whisper_service is not None
-    embedding_loaded = hasattr(app.state, "embedding_service") and app.state.embedding_service is not None
+    use_hf_whisper = os.getenv("USE_HF_WHISPER", "false").lower() == "true"
+    use_hf_embeddings = os.getenv("USE_HF_EMBEDDINGS", "false").lower() == "true"
+
+    whisper_loaded = False if use_hf_whisper else (hasattr(app.state, "whisper_service") and app.state.whisper_service is not None)
+    embedding_loaded = False if use_hf_embeddings else (hasattr(app.state, "embedding_service") and app.state.embedding_service is not None)
+    
     return {
         "status": "ok",
+        "whisper_mode": "huggingface" if use_hf_whisper else "local",
+        "embedding_mode": "huggingface" if use_hf_embeddings else "local",
         "whisper_loaded": whisper_loaded,
-        "sentence_transformer_loaded": embedding_loaded
+        "embedding_loaded": embedding_loaded
     }
 
 if __name__ == "__main__":

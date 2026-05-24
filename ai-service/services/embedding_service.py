@@ -1,9 +1,10 @@
 import hashlib
 import os
+import time
+import requests
 from collections import OrderedDict
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Any
 
 
@@ -36,8 +37,13 @@ class _LRUCache:
 
 class EmbeddingService:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2", cache_size: int = None):
-        # Load the sentence-transformer model locally
-        self.model = SentenceTransformer(model_name, device="cpu")
+        self.use_hf = os.getenv("USE_HF_EMBEDDINGS", "false").lower() == "true"
+        if not self.use_hf:
+            from sentence_transformers import SentenceTransformer
+            self.model = SentenceTransformer(model_name, device="cpu")
+        else:
+            self.model = None
+
         capacity = cache_size if cache_size is not None else int(os.getenv("EMBEDDING_CACHE_SIZE", "512"))
         self._cache = _LRUCache(capacity)
 
@@ -59,9 +65,55 @@ class EmbeddingService:
         if cached is not None:
             return cached
 
-        embedding = self.model.encode(text).tolist()
+        if self.use_hf:
+            embedding = self._generate_hf(text)
+        else:
+            embedding = self.model.encode(text).tolist()
+
         self._cache.put(key, embedding)
         return embedding
+
+    def _generate_hf(self, text: str) -> List[float]:
+        api_key = os.getenv("HUGGINGFACE_API_KEY")
+        headers = {"Authorization": f"Bearer {api_key}"}
+        url = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
+        
+        for attempt in range(2):
+            try:
+                response = requests.post(url, headers=headers, json={"inputs": text}, timeout=15)
+            except requests.exceptions.Timeout:
+                print("Embedding API timed out")
+                return [0.0] * 384
+            except Exception as e:
+                print(f"Embedding API request failed: {e}")
+                return [0.0] * 384
+
+            if response.status_code == 503 and attempt == 0:
+                print("Embedding model loading on HuggingFace, waiting 20s...")
+                time.sleep(20)
+                continue
+            
+            if response.status_code != 200:
+                print(f"Embedding API error {response.status_code}: {response.text}")
+                return [0.0] * 384
+            
+            try:
+                result = response.json()
+                if isinstance(result, list):
+                    # Response is a nested list, take response[0]
+                    if len(result) > 0 and isinstance(result[0], list) and len(result[0]) == 384:
+                        return result[0]
+                    elif len(result) == 384:
+                        # Fallback if it ever returns a flat list
+                        return result
+                print(f"Embedding API returned unexpected shape: {result}")
+                return [0.0] * 384
+            except Exception as e:
+                print(f"Embedding API JSON parse error: {e}")
+                return [0.0] * 384
+                
+        print("Embedding API model loading timeout")
+        return [0.0] * 384
 
     def cache_stats(self) -> Dict[str, int]:
         """Exposed so /health or admin routes can surface hit-rate over time."""
