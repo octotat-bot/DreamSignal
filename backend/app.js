@@ -24,7 +24,7 @@ const errorHandler = require('./middleware/errorMiddleware');
 
 function createApp(options = {}) {
   const {
-    enableRateLimit = process.env.NODE_ENV !== 'test',
+    enableRateLimit = process.env.NODE_ENV === 'production',
     enableHttpLogger = process.env.NODE_ENV !== 'test',
     corsOrigin = 'http://localhost:5173',
   } = options;

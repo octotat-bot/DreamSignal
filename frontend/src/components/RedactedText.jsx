@@ -51,7 +51,7 @@ const RedactedText = ({
         if (tok.type === 'redact') {
           const width = `${tok.len * 0.55}em`;
           return (
-            <span key={i} style={{ position: 'relative', display: 'inline-block' }}>
+            <span key={i} className="redacted-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
               {/* The actual text, only visible when revealed */}
               <span style={{
                 opacity: revealed ? 1 : 0,

@@ -5,6 +5,7 @@ import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import GuestRoute from './components/GuestRoute';
 import Navbar from './components/Navbar';
+import DetectiveCursor from './components/DetectiveCursor';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -137,6 +138,9 @@ const AppContent = () => {
     }}>
       {/* Keyboard-only skip-to-main link — visible when focused, hidden otherwise. */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
+
+      {/* Detective loupe cursor — replaces default OS cursor app-wide */}
+      <DetectiveCursor />
 
       {isAuthenticated && !loading && <Navbar />}
 

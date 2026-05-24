@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { motion } from 'framer-motion';
@@ -7,7 +7,8 @@ import CoffeeRing from '../components/CoffeeRing';
 
 const AuthPages = () => {
   const navigate  = useNavigate();
-  const { login, register } = useAuth();
+  const location  = useLocation();
+  const { login, signup } = useAuth();
   const toast     = useToast();
   const isLogin   = location.pathname === '/login';
 
@@ -23,11 +24,11 @@ const AuthPages = () => {
       if (isLogin) {
         await login(form.email, form.password);
       } else {
-        await register(form.username, form.email, form.password);
+        await signup(form.username, form.email, form.password);
       }
       navigate('/dashboard');
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Authentication failed.');
+      toast.error(err?.message || 'Authentication failed.');
     } finally {
       setLoading(false);
     }
