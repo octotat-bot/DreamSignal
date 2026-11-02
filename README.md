@@ -63,7 +63,7 @@ Dream Signal is a cinematic, premium-grade dream intelligence application design
 ## Directory Structure
 
 ```
-dream/
+DreamSignal/
 ├── ai-service/             # FastAPI Python Microservice
 │   ├── models/             # Pydantic Schemas
 │   ├── routes/             # Analyze & Transcribe endpoint controllers
@@ -99,7 +99,7 @@ dream/
 ├── scripts/                # Lifecycle scripts
 │   ├── setup.sh            # One-time install (Node, Python venv, env files)
 │   ├── start.sh            # Launches all three services with prefixed logs
-│   ├── stop.sh             # Kills anything left on ports 5001 / 5173 / 8001
+│   ├── stop.sh             # Kills anything left on ports 5001 / 5173 / 8000
 │   └── cleanup_storage.js  # Deletes orphan audio files not referenced by any Dream
 ├── docker-compose.yml      # One-command stack (mongo + ai + backend + frontend)
 ├── .env.example            # Compose env template
@@ -114,7 +114,7 @@ dream/
 
 ### Option A — `docker compose up` (one command)
 
-The fastest path is the new compose stack:
+The fastest path is the compose stack:
 
 ```bash
 cp .env.example .env          # then fill in GEMINI_API_KEY + JWT_SECRET
@@ -187,7 +187,7 @@ Open <http://localhost:5173>.
 ```bash
 ./scripts/setup.sh     # one-time install + .env scaffolding
 ./scripts/start.sh     # boots all three services with prefixed log streams
-./scripts/stop.sh      # kills anything on 5001 / 5173 / 8001
+./scripts/stop.sh      # kills anything on 5001 / 5173 / 8000
 ```
 
 ---
